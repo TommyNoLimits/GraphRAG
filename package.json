@@ -1,0 +1,54 @@
+{
+  "name": "graphrag-neo4j",
+  "version": "1.0.0",
+  "description": "GraphRAG implementation with Neo4j database",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node testing/index.ts",
+    "watch": "tsc --watch",
+    "test": "jest",
+    "lint": "eslint testing/**/*.ts",
+    "neo4j:start": "docker-compose -f config/docker-compose.yml up -d",
+    "neo4j:stop": "docker-compose -f config/docker-compose.yml down",
+    "neo4j:logs": "docker-compose -f config/docker-compose.yml logs -f neo4j",
+    "migrate:users": "ts-node testing/migrations/simple-user-migration.ts",
+    "migrate:users:limit": "ts-node testing/migrations/simple-user-migration.ts",
+    "test:neo4j": "ts-node testing/scripts/test-neo4j.ts",
+    "demo:users": "ts-node testing/scripts/create-sample-users.ts",
+    "queries:sample": "ts-node testing/scripts/run-sample-queries.ts",
+    "show:nodes": "ts-node testing/scripts/show-all-nodes.ts",
+    "visualize": "ts-node testing/scripts/visualize-graphrag.ts",
+    "visualize:web": "open scripts/visualization/graphrag-visualization.html",
+    "production:setup": "echo '🚨 Production code is in ./production/ folder. See production/README.md for details.'",
+    "production:test-neo4j": "ts-node production/scripts/test-neo4j.ts",
+    "production:migrate:users": "ts-node production/migrations/production-user-migration.ts",
+    "production:migrate:users:limit": "ts-node production/migrations/production-user-migration.ts --limit=10",
+    "production:migrate:entities": "ts-node production/migrations/user-entity-migration.ts",
+    "production:migrate:entities:limit": "ts-node production/migrations/user-entity-migration.ts --limit=10"
+  },
+  "keywords": ["graphrag", "neo4j", "typescript", "knowledge-graph"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "neo4j-driver": "^5.15.0",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
+    "@types/pg": "^8.10.9"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "ts-jest": "^29.1.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

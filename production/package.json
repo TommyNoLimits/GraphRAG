@@ -1,0 +1,62 @@
+{
+  "name": "graphrag-production",
+  "version": "1.0.0",
+  "description": "Production GraphRAG migration and management tools",
+  "main": "production/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/production/index.js",
+    "dev": "ts-node production/index.ts",
+    "test": "jest",
+    "lint": "eslint production/**/*.ts",
+    
+    "db:create-production": "ts-node scripts/create-production-db.ts",
+    "example:user-service": "ts-node examples/user-service-example.ts",
+    "sync:setup": "echo 'Run the SQL script: production/sql/setup-triggers.sql'",
+    "db:list-tables": "ts-node scripts/list-tables.ts",
+    "check:user-funds": "ts-node scripts/check-user-funds-data.ts",
+    "generate:user-entity-cypher": "ts-node scripts/generate-user-entity-cypher.ts",
+    
+    "migrate:users": "ts-node migrations/production-user-migration.ts",
+    "migrate:users:limit": "ts-node migrations/production-user-migration.ts --limit=",
+    "migrate:user-entities": "ts-node migrations/user-entity-migration.ts",
+    "migrate:user-entities:limit": "ts-node migrations/user-entity-migration.ts --limit=",
+    "migrate:user-funds": "ts-node migrations/user-funds-migration.ts",
+    "migrate:user-funds:limit": "ts-node migrations/user-funds-migration.ts --limit=",
+    
+    "neo4j:start": "docker-compose up -d",
+    "neo4j:stop": "docker-compose down",
+    "neo4j:logs": "docker-compose logs -f neo4j",
+    
+    "schema:create": "ts-node scripts/manage-schema.ts create",
+    "schema:create-nodes": "ts-node scripts/manage-schema.ts create-nodes",
+    "schema:drop-nodes": "ts-node scripts/manage-schema.ts drop-nodes",
+    "schema:verify": "ts-node scripts/manage-schema.ts verify",
+    "schema:generate": "ts-node scripts/manage-schema.ts generate",
+    "schema:info": "ts-node scripts/manage-schema.ts info",
+    "schema:help": "ts-node scripts/manage-schema.ts help"
+  },
+  "keywords": ["graphrag", "neo4j", "postgresql", "migration", "production"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "neo4j-driver": "^5.15.0",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
+    "@types/pg": "^8.10.9"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "ts-jest": "^29.1.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
