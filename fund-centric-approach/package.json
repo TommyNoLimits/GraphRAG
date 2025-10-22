@@ -23,6 +23,10 @@
     "migrate:user-entities:limit": "ts-node migrations/user-entity-migration.ts --limit=",
     "migrate:user-funds": "ts-node migrations/user-funds-migration.ts",
     "migrate:user-funds:limit": "ts-node migrations/user-funds-migration.ts --limit=",
+    "migrate:subscriptions": "ts-node migrations/subscription-relationships-migration.ts",
+    "migrate:subscriptions:limit": "ts-node migrations/subscription-relationships-migration.ts --limit=",
+    "migrate:reify": "ts-node migrations/subscription-reification-migration.ts",
+    "migrate:reify:limit": "ts-node migrations/subscription-reification-migration.ts --limit=",
     
     "neo4j:start": "docker-compose up -d",
     "neo4j:stop": "docker-compose down",

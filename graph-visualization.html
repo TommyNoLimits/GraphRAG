@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GraphRAG Database Visualization</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
+        #network { width: 100%; height: 600px; border: 1px solid #ccc; }
+        .controls { margin-bottom: 20px; }
+        button { margin: 5px; padding: 10px; }
+        .info { background: #f0f0f0; padding: 10px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>GraphRAG Database Visualization</h1>
+    
+    <div class="info">
+        <h3>Current Database Status:</h3>
+        <ul>
+            <li><strong>Users:</strong> 24</li>
+            <li><strong>Tenants:</strong> 25</li>
+            <li><strong>User Entities:</strong> 81</li>
+            <li><strong>User Funds:</strong> 283</li>
+            <li><strong>Subscriptions:</strong> 3 (reified)</li>
+        </ul>
+    </div>
+
+    <div class="controls">
+        <button onclick="loadCompleteGraph()">Complete Graph</button>
+        <button onclick="loadUserTenantGraph()">Users & Tenants</button>
+        <button onclick="loadFundEntityGraph()">Funds & Entities</button>
+        <button onclick="loadSubscriptionGraph()">Subscriptions</button>
+        <button onclick="clearGraph()">Clear</button>
+    </div>
+
+    <div id="network"></div>
+
+    <script>
+        let network;
+        let nodes, edges;
+
+        // Initialize the network
+        function initNetwork() {
+            const container = document.getElementById('network');
+            const data = { nodes: new vis.DataSet([]), edges: new vis.DataSet([]) };
+            
+            const options = {
+                nodes: {
+                    shape: 'dot',
+                    size: 20,
+                    font: { size: 12 },
+                    borderWidth: 2,
+                    shadow: true
+                },
+                edges: {
+                    width: 2,
+                    color: { inherit: 'from' },
+                    smooth: { type: 'continuous' }
+                },
+                physics: {
+                    stabilization: { iterations: 100 }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 200
+                }
+            };
+
+            network = new vis.Network(container, data, options);
+        }
+
+        // Node styling based on type
+        function getNodeStyle(label) {
+            const styles = {
+                'User': { color: { background: '#4CAF50', border: '#2E7D32' } },
+                'Tenant': { color: { background: '#2196F3', border: '#1565C0' } },
+                'UserEntity': { color: { background: '#FF9800', border: '#E65100' } },
+                'UserFund': { color: { background: '#9C27B0', border: '#6A1B9A' } },
+                'Subscription': { color: { background: '#F44336', border: '#C62828' } }
+            };
+            return styles[label] || { color: { background: '#757575', border: '#424242' } };
+        }
+
+        // Edge styling based on type
+        function getEdgeStyle(type) {
+            const styles = {
+                'BELONGS_TO': { color: '#2196F3', width: 3 },
+                'BELONGS_TO_TENANT': { color: '#2196F3', width: 3 },
+                'INVESTED_THROUGH': { color: '#4CAF50', width: 4 },
+                'LINKED_TO': { color: '#F44336', width: 4 }
+            };
+            return styles[type] || { color: '#757575', width: 2 };
+        }
+
+        function loadCompleteGraph() {
+            // This would require actual data from Neo4j
+            // For now, show a sample structure
+            const sampleNodes = [
+                { id: 1, label: 'User: Flash Gordon', group: 'User' },
+                { id: 2, label: 'Tenant: fc0d81cb...', group: 'Tenant' },
+                { id: 3, label: 'Entity: Robinhood', group: 'UserEntity' },
+                { id: 4, label: 'Fund: CAZ Fund', group: 'UserFund' },
+                { id: 5, label: 'Subscription: 433', group: 'Subscription' }
+            ];
+
+            const sampleEdges = [
+                { from: 1, to: 2, label: 'BELONGS_TO' },
+                { from: 3, to: 2, label: 'BELONGS_TO' },
+                { from: 4, to: 2, label: 'BELONGS_TO_TENANT' },
+                { from: 4, to: 5, label: 'INVESTED_THROUGH' },
+                { from: 5, to: 3, label: 'LINKED_TO' }
+            ];
+
+            displayGraph(sampleNodes, sampleEdges);
+        }
+
+        function loadUserTenantGraph() {
+            const nodes = [
+                { id: 1, label: 'Users (24)', group: 'User' },
+                { id: 2, label: 'Tenants (25)', group: 'Tenant' }
+            ];
+            const edges = [
+                { from: 1, to: 2, label: 'BELONGS_TO (24)' }
+            ];
+            displayGraph(nodes, edges);
+        }
+
+        function loadFundEntityGraph() {
+            const nodes = [
+                { id: 1, label: 'User Funds (283)', group: 'UserFund' },
+                { id: 2, label: 'User Entities (81)', group: 'UserEntity' },
+                { id: 3, label: 'Tenants (25)', group: 'Tenant' }
+            ];
+            const edges = [
+                { from: 1, to: 3, label: 'BELONGS_TO_TENANT (283)' },
+                { from: 2, to: 3, label: 'BELONGS_TO (81)' },
+                { from: 1, to: 2, label: 'INVESTED_THROUGH (3)' }
+            ];
+            displayGraph(nodes, edges);
+        }
+
+        function loadSubscriptionGraph() {
+            const nodes = [
+                { id: 1, label: 'User Funds', group: 'UserFund' },
+                { id: 2, label: 'Subscriptions (3)', group: 'Subscription' },
+                { id: 3, label: 'User Entities', group: 'UserEntity' }
+            ];
+            const edges = [
+                { from: 1, to: 2, label: 'INVESTED_THROUGH (3)' },
+                { from: 2, to: 3, label: 'LINKED_TO (3)' }
+            ];
+            displayGraph(nodes, edges);
+        }
+
+        function displayGraph(nodeData, edgeData) {
+            const nodes = new vis.DataSet(
+                nodeData.map(node => ({
+                    id: node.id,
+                    label: node.label,
+                    ...getNodeStyle(node.group)
+                }))
+            );
+
+            const edges = new vis.DataSet(
+                edgeData.map(edge => ({
+                    from: edge.from,
+                    to: edge.to,
+                    label: edge.label,
+                    ...getEdgeStyle(edge.label.split(' ')[0])
+                }))
+            );
+
+            network.setData({ nodes, edges });
+        }
+
+        function clearGraph() {
+            network.setData({ nodes: new vis.DataSet([]), edges: new vis.DataSet([]) });
+        }
+
+        // Initialize on page load
+        initNetwork();
+    </script>
+</body>
+</html>

@@ -1,11 +1,13 @@
 /**
- * Centralized Neo4j Schema Management
+ * User-Centric Neo4j Schema Definition
  * 
- * This file contains all Neo4j schema definitions including:
- * - Node labels and their properties
- * - Constraints (unique, existence, etc.)
- * - Indexes for performance
- * - Relationships and their properties
+ * This schema follows a user-centric approach where:
+ * User -> Entity -> Fund -> Subscription
+ * 
+ * Key relationships:
+ * - User CONTROLS Entity
+ * - Entity INVESTS_IN Fund  
+ * - Fund HAS_SUBSCRIPTION Subscription
  */
 
 export interface SchemaConstraint {
@@ -28,7 +30,7 @@ export interface SchemaRelationship {
   from: string;
   to: string;
   type: string;
-  properties?: readonly string[];
+  properties: readonly string[];
 }
 
 export interface NodeSchema {
@@ -39,9 +41,9 @@ export interface NodeSchema {
 }
 
 /**
- * Complete Neo4j Schema Definition
+ * User-Centric Neo4j Schema Definition
  */
-export const NEO4J_SCHEMA = {
+export const USER_CENTRIC_SCHEMA = {
   // Node Labels
   nodes: {
     User: {
@@ -160,9 +162,7 @@ export const NEO4J_SCHEMA = {
           label: 'UserFund',
           properties: ['id'],
           cypher: 'CREATE CONSTRAINT user_fund_id_unique IF NOT EXISTS FOR (uf:UserFund) REQUIRE uf.id IS UNIQUE'
-        },
-        // Note: Removed tenant-constrained uniqueness constraint due to duplicate fund names in PostgreSQL data
-        // The data has duplicate fund names within the same tenant, so we handle this in migration logic
+        }
       ],
       indexes: [
         {
@@ -192,29 +192,13 @@ export const NEO4J_SCHEMA = {
           properties: ['fund_type'],
           type: 'BTREE',
           cypher: 'CREATE INDEX user_fund_fund_type IF NOT EXISTS FOR (uf:UserFund) ON (uf.fund_type)'
-        }
-      ]
-    },
-
-    Fund: {
-      label: 'Fund',
-      properties: ['fund_name', 'managed_vehicle', 'investment_manager_name', 'general_partner'],
-      constraints: [
+        },
         {
-          name: 'fund_name_unique',
-          type: 'UNIQUE',
-          label: 'Fund',
-          properties: ['fund_name'],
-          cypher: 'CREATE CONSTRAINT fund_name_unique IF NOT EXISTS FOR (f:Fund) REQUIRE f.fund_name IS UNIQUE'
-        }
-      ],
-      indexes: [
-        {
-          name: 'fund_name_index',
-          label: 'Fund',
-          properties: ['fund_name'],
+          name: 'user_fund_stage',
+          label: 'UserFund',
+          properties: ['stage'],
           type: 'BTREE',
-          cypher: 'CREATE INDEX fund_name_index IF NOT EXISTS FOR (f:Fund) ON (f.fund_name)'
+          cypher: 'CREATE INDEX user_fund_stage IF NOT EXISTS FOR (uf:UserFund) ON (uf.stage)'
         }
       ]
     },
@@ -229,13 +213,6 @@ export const NEO4J_SCHEMA = {
           label: 'Subscription',
           properties: ['id'],
           cypher: 'CREATE CONSTRAINT subscription_id_unique IF NOT EXISTS FOR (s:Subscription) REQUIRE s.id IS UNIQUE'
-        },
-        {
-          name: 'subscription_tenant_unique',
-          type: 'UNIQUE',
-          label: 'Subscription',
-          properties: ['tenant_id', 'id'],
-          cypher: 'CREATE CONSTRAINT subscription_tenant_unique IF NOT EXISTS FOR (s:Subscription) REQUIRE (s.tenant_id, s.id) IS UNIQUE'
         }
       ],
       indexes: [
@@ -261,64 +238,12 @@ export const NEO4J_SCHEMA = {
           cypher: 'CREATE INDEX subscription_commitment_amount IF NOT EXISTS FOR (s:Subscription) ON (s.commitment_amount)'
         }
       ]
-    },
-
-    Document: {
-      label: 'Document',
-      properties: ['id', 'tenant_id', 'fund_name', 'investment_entity', 'as_of_date', 'file_name'],
-      constraints: [
-        {
-          name: 'document_id_unique',
-          type: 'UNIQUE',
-          label: 'Document',
-          properties: ['id'],
-          cypher: 'CREATE CONSTRAINT document_id_unique IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE'
-        }
-      ],
-      indexes: [
-        {
-          name: 'document_classification_index',
-          label: 'Document',
-          properties: ['classification'],
-          type: 'BTREE',
-          cypher: 'CREATE INDEX document_classification_index IF NOT EXISTS FOR (d:Document) ON (d.classification)'
-        }
-      ]
-    },
-
-    NAV: {
-      label: 'NAV',
-      properties: ['tenant_id', 'fund_name', 'investment_entity', 'as_of_date', 'nav'],
-      constraints: [],
-      indexes: [
-        {
-          name: 'nav_date_index',
-          label: 'NAV',
-          properties: ['as_of_date'],
-          type: 'BTREE',
-          cypher: 'CREATE INDEX nav_date_index IF NOT EXISTS FOR (n:NAV) ON (n.as_of_date)'
-        }
-      ]
-    },
-
-    Transaction: {
-      label: 'Transaction',
-      properties: ['tenant_id', 'fund_name', 'investment_entity', 'as_of_date', 'transaction_amount', 'transaction_type'],
-      constraints: [],
-      indexes: [
-        {
-          name: 'transaction_date_index',
-          label: 'Transaction',
-          properties: ['as_of_date'],
-          type: 'BTREE',
-          cypher: 'CREATE INDEX transaction_date_index IF NOT EXISTS FOR (t:Transaction) ON (t.as_of_date)'
-        }
-      ]
     }
   },
 
   // Relationships
   relationships: [
+    // User-centric relationships
     {
       from: 'User',
       to: 'Tenant',
@@ -326,56 +251,39 @@ export const NEO4J_SCHEMA = {
       properties: ['created_at']
     },
     {
-      from: 'UserEntity',
-      to: 'Tenant',
-      type: 'BELONGS_TO_TENANT',
-      properties: ['created_at']
-    },
-    {
-      from: 'UserFund',
-      to: 'Tenant',
-      type: 'BELONGS_TO_TENANT',
-      properties: ['created_at']
-    },
-    {
-      from: 'UserFund',
+      from: 'User',
       to: 'UserEntity',
-      type: 'INVESTED_THROUGH',
-      properties: ['subscription_id', 'as_of_date', 'commitment_amount', 'created_at', 'updated_at']
+      type: 'CONTROLS',
+      properties: ['created_at', 'control_type']
+    },
+    {
+      from: 'UserEntity',
+      to: 'UserFund',
+      type: 'INVESTS_IN',
+      properties: ['created_at', 'investment_date']
     },
     {
       from: 'UserFund',
       to: 'Subscription',
-      type: 'INVESTED_THROUGH',
+      type: 'HAS_SUBSCRIPTION',
+      properties: ['created_at']
+    },
+    
+    // Tenant relationships (for data organization)
+    {
+      from: 'UserEntity',
+      to: 'Tenant',
+      type: 'BELONGS_TO',
+      properties: ['created_at']
+    },
+    {
+      from: 'UserFund',
+      to: 'Tenant',
+      type: 'BELONGS_TO',
       properties: ['created_at']
     },
     {
       from: 'Subscription',
-      to: 'UserEntity',
-      type: 'LINKED_TO',
-      properties: ['created_at']
-    },
-    // Document relationships - to be added when documents are migrated
-    // {
-    //   from: 'Subscription',
-    //   to: 'Document',
-    //   type: 'HAS_DOCUMENT',
-    //   properties: ['created_at', 'document_type']
-    // },
-    {
-      from: 'Document',
-      to: 'Tenant',
-      type: 'BELONGS_TO',
-      properties: ['created_at']
-    },
-    {
-      from: 'NAV',
-      to: 'Tenant',
-      type: 'BELONGS_TO',
-      properties: ['created_at']
-    },
-    {
-      from: 'Transaction',
       to: 'Tenant',
       type: 'BELONGS_TO',
       properties: ['created_at']
@@ -383,73 +291,4 @@ export const NEO4J_SCHEMA = {
   ]
 } as const;
 
-/**
- * Schema version for migration tracking
- */
-export const SCHEMA_VERSION = '1.0.0';
-
-/**
- * Get all constraints from the schema
- */
-export function getAllConstraints(): SchemaConstraint[] {
-  const constraints: SchemaConstraint[] = [];
-  
-  Object.values(NEO4J_SCHEMA.nodes).forEach(node => {
-    constraints.push(...node.constraints);
-  });
-  
-  return constraints;
-}
-
-/**
- * Get all indexes from the schema
- */
-export function getAllIndexes(): SchemaIndex[] {
-  const indexes: SchemaIndex[] = [];
-  
-  Object.values(NEO4J_SCHEMA.nodes).forEach(node => {
-    indexes.push(...node.indexes);
-  });
-  
-  return indexes;
-}
-
-/**
- * Get schema for a specific node label
- */
-export function getNodeSchema(label: string): NodeSchema | undefined {
-  return NEO4J_SCHEMA.nodes[label as keyof typeof NEO4J_SCHEMA.nodes];
-}
-
-/**
- * Generate Cypher for creating all constraints
- */
-export function generateConstraintsCypher(): string[] {
-  return getAllConstraints().map(constraint => constraint.cypher);
-}
-
-/**
- * Generate Cypher for creating all indexes
- */
-export function generateIndexesCypher(): string[] {
-  return getAllIndexes().map(index => index.cypher);
-}
-
-/**
- * Generate complete schema creation Cypher
- */
-export function generateSchemaCypher(): string[] {
-  return [
-    '-- Neo4j Schema Creation Script',
-    `-- Version: ${SCHEMA_VERSION}`,
-    '-- Generated: ' + new Date().toISOString(),
-    '',
-    '-- Constraints:',
-    ...generateConstraintsCypher(),
-    '',
-    '-- Indexes:',
-    ...generateIndexesCypher(),
-    '',
-    '-- Schema creation complete'
-  ];
-}
+export type UserCentricSchema = typeof USER_CENTRIC_SCHEMA;

@@ -92,7 +92,7 @@ npm run queries:sample      # Run sample queries
 ### Migration Commands
 ```bash
 npm run migrate:users       # Migrate all users
-npm run migrate:users:limit=5 # Test with 5 users
+npm run migrate:users:limit 5 # Test with 5 users
 ```
 
 ### Production Commands
