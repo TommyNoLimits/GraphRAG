@@ -33,9 +33,10 @@
     "schema:drop": "ts-node scripts/drop-schema.ts",
     "schema:show": "ts-node scripts/show-schema.ts",
     
-    "data:clean": "ts-node scripts/clean-all-data.ts",
-    "data:verify": "ts-node scripts/verify-data.ts",
-    "data:export": "ts-node scripts/export-data.ts"
+    "data:clean": "ts-node scripts/clear-data.ts",
+    "data:verify": "ts-node scripts/verify-graph.ts",
+    "data:export": "ts-node scripts/export-data.ts",
+    "data:fix-duplicates": "ts-node scripts/fix-duplicate-relationships.ts"
   },
   "dependencies": {
     "neo4j-driver": "^5.15.0",

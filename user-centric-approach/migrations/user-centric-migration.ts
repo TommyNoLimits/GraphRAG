@@ -141,29 +141,24 @@ export class UserCentricMigration {
     
     try {
       const tenants = await this.postgres.query('SELECT * FROM tenants');
+      console.log(`📊 Found ${tenants.length} tenants`);
       
-      // Debug: Check what we're getting from PostgreSQL
-      console.log('🔍 Sample tenant data:', JSON.stringify(tenants[0], null, 2));
-      
-      // Test with just the first tenant
-      const firstTenant = tenants[0];
-      console.log('🔍 First tenant cleaned:', JSON.stringify(firstTenant, null, 2));
-      
-      const query = `
-        MERGE (t:Tenant {id: $id})
-        SET t.name = $name,
-            t.created_at = $created_at,
-            t.updated_at = $updated_at
-        RETURN t
-      `;
-      
-      const result = await session.run(query, {
-        id: firstTenant.id,
-        name: firstTenant.name,
-        created_at: DateTime.fromStandardDate(new Date(firstTenant.created_at)),
-        updated_at: DateTime.fromStandardDate(new Date(firstTenant.updated_at))
-      });
-      console.log(`✅ Migrated 1 tenant:`, result.records[0].get('t').properties);
+      for (const tenant of tenants) {
+        const query = `
+          MERGE (t:Tenant {id: $id})
+          SET t.name = $name,
+              t.created_at = $created_at,
+              t.updated_at = $updated_at
+        `;
+        
+        await session.run(query, {
+          id: tenant.id,
+          name: tenant.name,
+          created_at: DateTime.fromStandardDate(new Date(tenant.created_at)),
+          updated_at: DateTime.fromStandardDate(new Date(tenant.updated_at))
+        });
+      }
+      console.log(`✅ Migrated ${tenants.length} tenants`);
       
     } finally {
       await session.close();
@@ -177,36 +172,34 @@ export class UserCentricMigration {
     try {
       const limitClause = limit ? `LIMIT ${limit}` : '';
       const users = await this.postgres.query(`SELECT * FROM users ${limitClause}`);
+      console.log(`📊 Found ${users.length} users`);
       
-      // Test with just the first user
-      const firstUser = users[0];
-      console.log('🔍 First user data:', JSON.stringify(firstUser, null, 2));
-      
-      const query = `
-        MERGE (u:User {id: $id})
-        SET u.tenant_id = $tenant_id,
-            u.username = $username,
-            u.email = $email,
-            u.first_name = $first_name,
-            u.last_name = $last_name,
-            u.created_at = $created_at,
-            u.updated_at = $updated_at
-        MERGE (t:Tenant {id: $tenant_id})
-        MERGE (u)-[:BELONGS_TO]->(t)
-        RETURN u
-      `;
-      
-      const result = await session.run(query, {
-        id: firstUser.id,
-        tenant_id: firstUser.tenant_id,
-        username: firstUser.username,
-        email: firstUser.email,
-        first_name: firstUser.first_name,
-        last_name: firstUser.last_name,
-        created_at: DateTime.fromStandardDate(new Date(firstUser.created_at)),
-        updated_at: DateTime.fromStandardDate(new Date(firstUser.updated_at))
-      });
-      console.log(`✅ Migrated 1 user:`, result.records[0].get('u').properties);
+      for (const user of users) {
+        const query = `
+          MERGE (u:User {id: $id})
+          SET u.tenant_id = $tenant_id,
+              u.username = $username,
+              u.email = $email,
+              u.first_name = $first_name,
+              u.last_name = $last_name,
+              u.created_at = $created_at,
+              u.updated_at = $updated_at
+          MERGE (t:Tenant {id: $tenant_id})
+          MERGE (u)-[:BELONGS_TO]->(t)
+        `;
+        
+        await session.run(query, {
+          id: user.id,
+          tenant_id: user.tenant_id,
+          username: user.username,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          created_at: DateTime.fromStandardDate(new Date(user.created_at)),
+          updated_at: DateTime.fromStandardDate(new Date(user.updated_at))
+        });
+      }
+      console.log(`✅ Migrated ${users.length} users`);
       
     } finally {
       await session.close();
@@ -220,32 +213,30 @@ export class UserCentricMigration {
     try {
       const limitClause = limit ? `LIMIT ${limit}` : '';
       const entities = await this.postgres.query(`SELECT * FROM user_entities ${limitClause}`);
+      console.log(`📊 Found ${entities.length} entities`);
       
-      // Test with just the first entity
-      const firstEntity = entities[0];
-      console.log('🔍 First entity data:', JSON.stringify(firstEntity, null, 2));
-      
-      const query = `
-        MERGE (ue:UserEntity {id: $id})
-        SET ue.tenant_id = $tenant_id,
-            ue.investment_entity = $investment_entity,
-            ue.entity_allias = $entity_allias,
-            ue.created_at = $created_at,
-            ue.updated_at = $updated_at
-        MERGE (t:Tenant {id: $tenant_id})
-        MERGE (ue)-[:BELONGS_TO]->(t)
-        RETURN ue
-      `;
-      
-      const result = await session.run(query, {
-        id: firstEntity.id,
-        tenant_id: firstEntity.tenant_id,
-        investment_entity: firstEntity.investment_entity,
-        entity_allias: firstEntity.entity_allias,
-        created_at: DateTime.fromStandardDate(new Date(firstEntity.created_at)),
-        updated_at: DateTime.fromStandardDate(new Date(firstEntity.updated_at))
-      });
-      console.log(`✅ Migrated 1 user entity:`, result.records[0].get('ue').properties);
+      for (const entity of entities) {
+        const query = `
+          MERGE (ue:UserEntity {id: $id})
+          SET ue.tenant_id = $tenant_id,
+              ue.investment_entity = $investment_entity,
+              ue.entity_allias = $entity_allias,
+              ue.created_at = $created_at,
+              ue.updated_at = $updated_at
+          MERGE (t:Tenant {id: $tenant_id})
+          MERGE (t)-[:MANAGES]->(ue)
+        `;
+        
+        await session.run(query, {
+          id: entity.id,
+          tenant_id: entity.tenant_id,
+          investment_entity: entity.investment_entity,
+          entity_allias: entity.entity_allias,
+          created_at: DateTime.fromStandardDate(new Date(entity.created_at)),
+          updated_at: DateTime.fromStandardDate(new Date(entity.updated_at))
+        });
+      }
+      console.log(`✅ Migrated ${entities.length} entities`);
       
     } finally {
       await session.close();
@@ -259,36 +250,32 @@ export class UserCentricMigration {
     try {
       const limitClause = limit ? `LIMIT ${limit}` : '';
       const funds = await this.postgres.query(`SELECT * FROM user_funds ${limitClause}`);
+      console.log(`📊 Found ${funds.length} funds`);
       
-      // Test with just the first fund
-      const firstFund = funds[0];
-      console.log('🔍 First fund data:', JSON.stringify(firstFund, null, 2));
-      
-      const query = `
-        MERGE (uf:UserFund {id: $id})
-        SET uf.tenant_id = $tenant_id,
-            uf.fund_name = $fund_name,
-            uf.stage = $stage,
-            uf.investment_type = $investment_type,
-            uf.fund_type = $fund_type,
-            uf.created_at = $created_at,
-            uf.updated_at = $updated_at
-        MERGE (t:Tenant {id: $tenant_id})
-        MERGE (uf)-[:BELONGS_TO]->(t)
-        RETURN uf
-      `;
-      
-      const result = await session.run(query, {
-        id: firstFund.id,
-        tenant_id: firstFund.tenant_id,
-        fund_name: firstFund.fund_name,
-        stage: firstFund.stage,
-        investment_type: firstFund.investment_type,
-        fund_type: firstFund.fund_type,
-        created_at: DateTime.fromStandardDate(new Date(firstFund.created_at)),
-        updated_at: DateTime.fromStandardDate(new Date(firstFund.updated_at))
-      });
-      console.log(`✅ Migrated 1 user fund:`, result.records[0].get('uf').properties);
+      for (const fund of funds) {
+        const query = `
+          MERGE (uf:UserFund {id: $id})
+          SET uf.tenant_id = $tenant_id,
+              uf.fund_name = $fund_name,
+              uf.stage = $stage,
+              uf.investment_type = $investment_type,
+              uf.fund_type = $fund_type,
+              uf.created_at = $created_at,
+              uf.updated_at = $updated_at
+        `;
+        
+        await session.run(query, {
+          id: fund.id,
+          tenant_id: fund.tenant_id,
+          fund_name: fund.fund_name,
+          stage: fund.stage,
+          investment_type: fund.investment_type,
+          fund_type: fund.fund_type,
+          created_at: DateTime.fromStandardDate(new Date(fund.created_at)),
+          updated_at: DateTime.fromStandardDate(new Date(fund.updated_at))
+        });
+      }
+      console.log(`✅ Migrated ${funds.length} funds`);
       
     } finally {
       await session.close();
@@ -301,43 +288,33 @@ export class UserCentricMigration {
     
     try {
       const limitClause = limit ? `LIMIT ${limit}` : '';
-      const subscriptions = await this.postgres.query(`
-        SELECT s.*, uf.stage
-        FROM subscriptions s
-        INNER JOIN user_funds uf ON s.tenant_id = uf.tenant_id AND s.fund_name = uf.fund_name
-        WHERE uf.stage = 'Invested'
-        ${limitClause}
-      `);
+      const subscriptions = await this.postgres.query(`SELECT * FROM subscriptions ${limitClause}`);
+      console.log(`📊 Found ${subscriptions.length} subscriptions`);
       
-      // Test with just the first subscription
-      const firstSubscription = subscriptions[0];
-      console.log('🔍 First subscription data:', JSON.stringify(firstSubscription, null, 2));
-      
-      const query = `
-        MERGE (s:Subscription {id: $id})
-        SET s.tenant_id = $tenant_id,
-            s.fund_name = $fund_name,
-            s.investment_entity = $investment_entity,
-            s.as_of_date = $as_of_date,
-            s.commitment_amount = $commitment_amount,
-            s.created_at = $created_at,
-            s.updated_at = $updated_at
-        MERGE (t:Tenant {id: $tenant_id})
-        MERGE (s)-[:BELONGS_TO]->(t)
-        RETURN s
-      `;
-      
-      const result = await session.run(query, {
-        id: firstSubscription.id,
-        tenant_id: firstSubscription.tenant_id,
-        fund_name: firstSubscription.fund_name,
-        investment_entity: firstSubscription.investment_entity,
-        as_of_date: DateTime.fromStandardDate(new Date(firstSubscription.as_of_date)),
-        commitment_amount: firstSubscription.commitment_amount,
-        created_at: DateTime.fromStandardDate(new Date(firstSubscription.created_at)),
-        updated_at: DateTime.fromStandardDate(new Date(firstSubscription.updated_at))
-      });
-      console.log(`✅ Migrated 1 subscription:`, result.records[0].get('s').properties);
+      for (const subscription of subscriptions) {
+        const query = `
+          MERGE (s:Subscription {id: $id})
+          SET s.tenant_id = $tenant_id,
+              s.fund_name = $fund_name,
+              s.investment_entity = $investment_entity,
+              s.as_of_date = $as_of_date,
+              s.commitment_amount = $commitment_amount,
+              s.created_at = $created_at,
+              s.updated_at = $updated_at
+        `;
+        
+        await session.run(query, {
+          id: subscription.id,
+          tenant_id: subscription.tenant_id,
+          fund_name: subscription.fund_name,
+          investment_entity: subscription.investment_entity,
+          as_of_date: DateTime.fromStandardDate(new Date(subscription.as_of_date)),
+          commitment_amount: subscription.commitment_amount,
+          created_at: DateTime.fromStandardDate(new Date(subscription.created_at)),
+          updated_at: DateTime.fromStandardDate(new Date(subscription.updated_at))
+        });
+      }
+      console.log(`✅ Migrated ${subscriptions.length} subscriptions`);
       
     } finally {
       await session.close();
@@ -345,28 +322,21 @@ export class UserCentricMigration {
   }
 
   private async createUserCentricRelationships(): Promise<void> {
-    console.log('🔗 Creating user-centric relationships...');
+    console.log('🔗 Creating tenant-centric relationships...');
     const session = this.neo4j['driver']!.session({ database: this.database });
     
     try {
-      // User -> Entity relationships
-      const userEntityQuery = `
-        MATCH (u:User), (ue:UserEntity)
-        WHERE u.tenant_id = ue.tenant_id
-        MERGE (u)-[:CONTROLS {created_at: datetime()}]->(ue)
-        RETURN count(*) as created
-      `;
-      
-      const userEntityResult = await session.run(userEntityQuery);
-      const userEntityCount = userEntityResult.records[0].get('created').toNumber();
-      console.log(`✅ Created ${userEntityCount} User->Entity relationships`);
-      
-      // Entity -> Fund relationships (for invested funds)
+      // 1. Create Entity -> Fund relationships based on subscription data (one per unique entity-fund pair)
+      console.log('🏛️ Creating Entity -> Fund relationships based on subscriptions...');
       const entityFundQuery = `
-        MATCH (ue:UserEntity), (uf:UserFund)
-        WHERE ue.tenant_id = uf.tenant_id
-        AND uf.stage = 'Invested'
-        MERGE (ue)-[:INVESTS_IN {created_at: datetime()}]->(uf)
+        MATCH (ue:UserEntity), (uf:UserFund), (s:Subscription)
+        WHERE ue.tenant_id = s.tenant_id 
+          AND uf.tenant_id = s.tenant_id
+          AND ue.investment_entity = s.investment_entity
+          AND uf.fund_name = s.fund_name
+        WITH DISTINCT ue, uf, s
+        WITH DISTINCT ue, uf
+        MERGE (ue)-[:INVESTED_IN {created_at: datetime()}]->(uf)
         RETURN count(*) as created
       `;
       
@@ -374,11 +344,12 @@ export class UserCentricMigration {
       const entityFundCount = entityFundResult.records[0].get('created').toNumber();
       console.log(`✅ Created ${entityFundCount} Entity->Fund relationships`);
       
-      // Fund -> Subscription relationships
+      // 2. Create Fund -> Subscription relationships (one per unique fund-subscription pair)
+      console.log('💰 Creating Fund -> Subscription relationships...');
       const fundSubscriptionQuery = `
         MATCH (uf:UserFund), (s:Subscription)
-        WHERE uf.tenant_id = s.tenant_id 
-        AND uf.fund_name = s.fund_name
+        WHERE uf.tenant_id = s.tenant_id AND uf.fund_name = s.fund_name
+        WITH DISTINCT uf, s
         MERGE (uf)-[:HAS_SUBSCRIPTION {created_at: datetime()}]->(s)
         RETURN count(*) as created
       `;
@@ -386,6 +357,38 @@ export class UserCentricMigration {
       const fundSubscriptionResult = await session.run(fundSubscriptionQuery);
       const fundSubscriptionCount = fundSubscriptionResult.records[0].get('created').toNumber();
       console.log(`✅ Created ${fundSubscriptionCount} Fund->Subscription relationships`);
+      
+      // 3. Create Entity -> Subscription relationships (one per unique entity-subscription pair)
+      console.log('🏛️ Creating Entity -> Subscription relationships...');
+      const entitySubscriptionQuery = `
+        MATCH (ue:UserEntity), (s:Subscription)
+        WHERE ue.tenant_id = s.tenant_id AND ue.investment_entity = s.investment_entity
+        WITH DISTINCT ue, s
+        MERGE (ue)-[:HAS_SUBSCRIPTION {created_at: datetime()}]->(s)
+        RETURN count(*) as created
+      `;
+      
+      const entitySubscriptionResult = await session.run(entitySubscriptionQuery);
+      const entitySubscriptionCount = entitySubscriptionResult.records[0].get('created').toNumber();
+      console.log(`✅ Created ${entitySubscriptionCount} Entity->Subscription relationships`);
+      
+      // 4. Create Tenant -> Fund INTEREST relationships for funds without subscriptions
+      console.log('💡 Creating Tenant -> Fund INTEREST relationships...');
+      const interestQuery = `
+        MATCH (t:Tenant), (uf:UserFund)
+        WHERE t.id = uf.tenant_id
+        AND NOT EXISTS {
+          MATCH (uf)-[:HAS_SUBSCRIPTION]->(:Subscription)
+        }
+        MERGE (t)-[:INTEREST {created_at: datetime()}]->(uf)
+        RETURN count(*) as created
+      `;
+      
+      const interestResult = await session.run(interestQuery);
+      const interestCount = interestResult.records[0].get('created').toNumber();
+      console.log(`✅ Created ${interestCount} Tenant->Fund INTEREST relationships`);
+      
+      console.log(`\n📊 Total relationships created: ${entityFundCount + fundSubscriptionCount + entitySubscriptionCount + interestCount}`);
       
     } finally {
       await session.close();
