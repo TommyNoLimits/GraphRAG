@@ -1,0 +1,289 @@
+const neo4j = require('neo4j-driver');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+require('dotenv').config();
+
+class GraphRAGService {
+  constructor() {
+    // Initialize Neo4j connection
+    this.driver = neo4j.driver(
+      process.env.NEO4J_URI,
+      neo4j.auth.basic(process.env.NEO4J_USER, process.env.NEO4J_PASSWORD)
+    );
+
+    // Initialize Gemini
+    this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+  }
+
+  async connect() {
+    try {
+      await this.driver.verifyConnectivity();
+      console.log('✅ Connected to Neo4j');
+    } catch (error) {
+      console.error('❌ Neo4j connection failed:', error.message);
+      throw error;
+    }
+  }
+
+  async close() {
+    await this.driver.close();
+  }
+
+  /**
+   * Convert natural language query to Cypher using Gemini
+   */
+  async generateCypherQuery(naturalLanguageQuery, tenantId = null) {
+    const prompt = `
+You are a Neo4j Cypher query expert. Convert the following natural language query into a Cypher query.
+
+Database Schema:
+- User: {id, tenant_id, email, first_name, last_name, username, ...}
+- Tenant: {id, name, created_at, updated_at}
+- UserEntity: {id, tenant_id, investment_entity, entity_allias, ...}
+- UserFund: {id, tenant_id, fund_name, investment_manager_name, general_partner, investment_type, fund_type, stage, investment_minimum, management_fee, carry_fee, geography, gics_sector, liquidity, investment_summary, ...}
+- Subscription: {id, tenant_id, fund_name, investment_entity, as_of_date, commitment_amount, ...}
+
+Relationships:
+- User -[:BELONGS_TO]-> Tenant
+- Tenant -[:MANAGES]-> UserEntity
+- UserEntity -[:INVESTED_IN]-> UserFund
+- UserFund -[:HAS_SUBSCRIPTION]-> Subscription
+- UserEntity -[:HAS_SUBSCRIPTION]-> Subscription
+- Tenant -[:INTEREST]-> UserFund
+
+${tenantId ? `IMPORTANT: Filter all queries by tenant_id = '${tenantId}' for data isolation.` : ''}
+
+Natural Language Query: "${naturalLanguageQuery}"
+
+Return ONLY the Cypher query, no explanations or markdown formatting.
+`;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const cypherQuery = response.text().trim();
+      
+      console.log('🤖 Generated Cypher:', cypherQuery);
+      return cypherQuery;
+    } catch (error) {
+      console.error('❌ Gemini API error:', error.message);
+      throw new Error('Failed to generate Cypher query');
+    }
+  }
+
+  /**
+   * Execute Cypher query and return results
+   */
+  async executeQuery(cypherQuery) {
+    const session = this.driver.session();
+    try {
+      const result = await session.run(cypherQuery);
+      
+      // Convert Neo4j records to plain objects
+      const records = result.records.map(record => {
+        const obj = {};
+        record.keys.forEach(key => {
+          const value = record.get(key);
+          obj[key] = this.convertNeo4jValue(value);
+        });
+        return obj;
+      });
+
+      return {
+        records: records,
+        summary: result.summary
+      };
+    } catch (error) {
+      console.error('❌ Cypher execution error:', error.message);
+      throw new Error(`Query execution failed: ${error.message}`);
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Convert Neo4j values to plain JavaScript objects
+   */
+  convertNeo4jValue(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    
+    if (neo4j.isInt(value)) {
+      return value.toNumber();
+    }
+    
+    if (neo4j.isDate(value)) {
+      return value.toString();
+    }
+    
+    if (neo4j.isDateTime(value)) {
+      return value.toString();
+    }
+    
+    if (neo4j.isTime(value)) {
+      return value.toString();
+    }
+    
+    if (neo4j.isDuration(value)) {
+      return value.toString();
+    }
+    
+    if (neo4j.isPoint(value)) {
+      return value.toString();
+    }
+    
+    if (typeof value === 'object' && value !== null) {
+      if (Array.isArray(value)) {
+        return value.map(item => this.convertNeo4jValue(item));
+      } else {
+        const obj = {};
+        for (const [key, val] of Object.entries(value)) {
+          obj[key] = this.convertNeo4jValue(val);
+        }
+        return obj;
+      }
+    }
+    
+    return value;
+  }
+
+  /**
+   * Process natural language query and return results
+   */
+  async processQuery(naturalLanguageQuery, tenantId = null) {
+    try {
+      // Generate Cypher query using Gemini
+      const cypherQuery = await this.generateCypherQuery(naturalLanguageQuery, tenantId);
+      
+      // Execute the query
+      const result = await this.executeQuery(cypherQuery);
+      
+      return {
+        success: true,
+        query: cypherQuery,
+        results: result.records,
+        summary: {
+          recordsReturned: result.records.length,
+          queryTime: result.summary.resultAvailableAfter + result.summary.resultConsumedAfter
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        query: null,
+        results: []
+      };
+    }
+  }
+
+  /**
+   * Get user's complete investment journey
+   */
+  async getUserInvestmentJourney(userEmail, tenantId) {
+    const query = `
+      MATCH (u:User {email: $userEmail})-[:BELONGS_TO]->(t:Tenant {id: $tenantId})-[:MANAGES]->(ue:UserEntity)-[:INVESTED_IN]->(uf:UserFund)
+      OPTIONAL MATCH (uf)-[:HAS_SUBSCRIPTION]->(s:Subscription)
+      OPTIONAL MATCH (ue)-[:HAS_SUBSCRIPTION]->(s2:Subscription)
+      OPTIONAL MATCH (t)-[:INTEREST]->(uf_interest:UserFund)
+      RETURN 
+        u.email as user_email,
+        u.first_name as user_first_name,
+        u.last_name as user_last_name,
+        t.name as tenant_name,
+        collect(DISTINCT ue.investment_entity) as entities,
+        collect(DISTINCT {
+          fund_name: uf.fund_name,
+          investment_manager: uf.investment_manager_name,
+          fund_type: uf.fund_type,
+          stage: uf.stage,
+          investment_minimum: uf.investment_minimum,
+          management_fee: uf.management_fee,
+          geography: uf.geography
+        }) as invested_funds,
+        collect(DISTINCT {
+          fund_name: s.fund_name,
+          commitment_amount: s.commitment_amount,
+          as_of_date: s.as_of_date
+        }) as fund_subscriptions,
+        collect(DISTINCT {
+          fund_name: s2.fund_name,
+          commitment_amount: s2.commitment_amount,
+          as_of_date: s2.as_of_date
+        }) as entity_subscriptions,
+        collect(DISTINCT {
+          fund_name: uf_interest.fund_name,
+          investment_manager: uf_interest.investment_manager_name,
+          fund_type: uf_interest.fund_type,
+          stage: uf_interest.stage
+        }) as interest_funds
+    `;
+
+    return await this.executeQuery(query, { userEmail, tenantId });
+  }
+
+  /**
+   * Search funds by various criteria
+   */
+  async searchFunds(searchCriteria, tenantId) {
+    const { fundName, fundType, investmentType, stage, geography, minInvestment } = searchCriteria;
+    
+    let whereClause = `uf.tenant_id = $tenantId`;
+    const params = { tenantId };
+    
+    if (fundName) {
+      whereClause += ` AND uf.fund_name CONTAINS $fundName`;
+      params.fundName = fundName;
+    }
+    
+    if (fundType) {
+      whereClause += ` AND uf.fund_type = $fundType`;
+      params.fundType = fundType;
+    }
+    
+    if (investmentType) {
+      whereClause += ` AND uf.investment_type = $investmentType`;
+      params.investmentType = investmentType;
+    }
+    
+    if (stage) {
+      whereClause += ` AND uf.stage = $stage`;
+      params.stage = stage;
+    }
+    
+    if (geography) {
+      whereClause += ` AND uf.geography CONTAINS $geography`;
+      params.geography = geography;
+    }
+    
+    if (minInvestment) {
+      whereClause += ` AND uf.investment_minimum <= $minInvestment`;
+      params.minInvestment = parseFloat(minInvestment);
+    }
+
+    const query = `
+      MATCH (uf:UserFund)
+      WHERE ${whereClause}
+      RETURN 
+        uf.fund_name as fund_name,
+        uf.investment_manager_name as investment_manager,
+        uf.general_partner as general_partner,
+        uf.fund_type as fund_type,
+        uf.investment_type as investment_type,
+        uf.stage as stage,
+        uf.investment_minimum as investment_minimum,
+        uf.management_fee as management_fee,
+        uf.carry_fee as carry_fee,
+        uf.geography as geography,
+        uf.gics_sector as gics_sector,
+        uf.liquidity as liquidity,
+        uf.investment_summary as investment_summary
+      ORDER BY uf.fund_name
+    `;
+
+    return await this.executeQuery(query, params);
+  }
+}
+
+module.exports = GraphRAGService;

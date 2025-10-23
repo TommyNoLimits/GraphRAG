@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphRAG LLM Component</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .query-section {
+            margin-bottom: 30px;
+        }
+
+        .query-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .input-group input, .input-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus, .input-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .results h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .query-display {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .results-table th,
+        .results-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .results-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .results-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #28a745;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .examples {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .examples h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .example-query {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .example-query:hover {
+            background: #e9ecef;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-card h4 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .stat-card p {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 GraphRAG LLM Component</h1>
+            <p>Search your Neo4j investment database using natural language with Gemini AI</p>
+        </div>
+
+        <div class="main-content">
+            <!-- Query Section -->
+            <div class="query-section">
+                <h2>Ask Questions About Your Investment Data</h2>
+                
+                <div class="input-group">
+                    <label for="tenantId">Tenant ID (for data isolation):</label>
+                    <input type="text" id="tenantId" placeholder="fd68d10f-0780-4140-b393-3adf8109df4f" value="fd68d10f-0780-4140-b393-3adf8109df4f">
+                </div>
+
+                <div class="input-group">
+                    <label for="query">Natural Language Query:</label>
+                    <textarea id="query" placeholder="Ask questions like: 'Show me all hedge funds with minimum investment under $1M' or 'What funds is Hunter C Honnessy IRA invested in?'"></textarea>
+                </div>
+
+                <button class="btn" onclick="processQuery()">🔍 Search Database</button>
+            </div>
+
+            <!-- Examples -->
+            <div class="examples">
+                <h3>💡 Example Queries (Click to try):</h3>
+                <div class="example-query" onclick="setQuery('Show me all funds in the Recently Added stage')">
+                    Show me all funds in the Recently Added stage
+                </div>
+                <div class="example-query" onclick="setQuery('What funds have investment minimum under $500,000?')">
+                    What funds have investment minimum under $500,000?
+                </div>
+                <div class="example-query" onclick="setQuery('Show me all hedge funds with monthly liquidity')">
+                    Show me all hedge funds with monthly liquidity
+                </div>
+                <div class="example-query" onclick="setQuery('What is the investment journey for tommymmcguire@gmail.com?')">
+                    What is the investment journey for tommymmcguire@gmail.com?
+                </div>
+                <div class="example-query" onclick="setQuery('Show me funds managed by CAZ Investments LP')">
+                    Show me funds managed by CAZ Investments LP
+                </div>
+                <div class="example-query" onclick="setQuery('What are the subscription details for Liquid Income fund?')">
+                    What are the subscription details for Liquid Income fund?
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div id="results" style="display: none;">
+                <div class="results">
+                    <h3>📊 Query Results</h3>
+                    <div id="queryDisplay"></div>
+                    <div id="resultsContent"></div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats" id="stats">
+                <div class="stat-card">
+                    <h4 id="totalNodes">-</h4>
+                    <p>Total Nodes</p>
+                </div>
+                <div class="stat-card">
+                    <h4 id="totalUsers">-</h4>
+                    <p>Users</p>
+                </div>
+                <div class="stat-card">
+                    <h4 id="totalFunds">-</h4>
+                    <p>Funds</p>
+                </div>
+                <div class="stat-card">
+                    <h4 id="totalSubscriptions">-</h4>
+                    <p>Subscriptions</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set query from example
+        function setQuery(query) {
+            document.getElementById('query').value = query;
+        }
+
+        // Process query
+        async function processQuery() {
+            const query = document.getElementById('query').value.trim();
+            const tenantId = document.getElementById('tenantId').value.trim();
+            
+            if (!query) {
+                alert('Please enter a query');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('results');
+            const queryDisplay = document.getElementById('queryDisplay');
+            const resultsContent = document.getElementById('resultsContent');
+            
+            // Show loading
+            resultsDiv.style.display = 'block';
+            resultsContent.innerHTML = '<div class="loading">🤖 Generating Cypher query and executing...</div>';
+
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query, tenantId })
+                });
+
+                const data = await response.json();
+
+                // Display generated Cypher query
+                queryDisplay.innerHTML = `
+                    <strong>Generated Cypher Query:</strong><br>
+                    <div class="query-display">${data.query || 'No query generated'}</div>
+                `;
+
+                if (data.success) {
+                    // Display results
+                    if (data.results && data.results.length > 0) {
+                        const table = createResultsTable(data.results);
+                        resultsContent.innerHTML = `
+                            <div class="success">✅ Query executed successfully! Found ${data.results.length} results.</div>
+                            ${table}
+                        `;
+                    } else {
+                        resultsContent.innerHTML = `
+                            <div class="success">✅ Query executed successfully, but no results found.</div>
+                        `;
+                    }
+                } else {
+                    resultsContent.innerHTML = `
+                        <div class="error">❌ Error: ${data.error}</div>
+                    `;
+                }
+            } catch (error) {
+                resultsContent.innerHTML = `
+                    <div class="error">❌ Network error: ${error.message}</div>
+                `;
+            }
+        }
+
+        // Create results table
+        function createResultsTable(results) {
+            if (!results || results.length === 0) return '';
+
+            const keys = Object.keys(results[0]);
+            
+            let table = '<table class="results-table"><thead><tr>';
+            keys.forEach(key => {
+                table += `<th>${key}</th>`;
+            });
+            table += '</tr></thead><tbody>';
+
+            results.forEach(row => {
+                table += '<tr>';
+                keys.forEach(key => {
+                    let value = row[key];
+                    if (value === null || value === undefined) {
+                        value = '-';
+                    } else if (typeof value === 'object') {
+                        value = JSON.stringify(value);
+                    }
+                    table += `<td>${value}</td>`;
+                });
+                table += '</tr>';
+            });
+
+            table += '</tbody></table>';
+            return table;
+        }
+
+        // Load stats on page load
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = {};
+                    data.nodeCounts.forEach(stat => {
+                        stats[stat.node_type] = stat.count;
+                    });
+
+                    document.getElementById('totalNodes').textContent = 
+                        Object.values(stats).reduce((a, b) => a + b, 0);
+                    document.getElementById('totalUsers').textContent = stats.User || 0;
+                    document.getElementById('totalFunds').textContent = stats.UserFund || 0;
+                    document.getElementById('totalSubscriptions').textContent = stats.Subscription || 0;
+                }
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        // Load stats when page loads
+        document.addEventListener('DOMContentLoaded', loadStats);
+    </script>
+</body>
+</html>
