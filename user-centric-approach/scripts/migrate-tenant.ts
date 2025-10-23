@@ -408,7 +408,41 @@ async function migrateTenant(tenantId: string) {
       await subscriptionSession.close();
     }
 
-    // 6. Create relationships for this tenant
+    // 6. Migrate NAVs for this tenant
+    console.log(`\n💰 Migrating NAVs for tenant: ${tenantId}`);
+    const navsQuery = `SELECT * FROM navs WHERE tenant_id = $1`;
+    const navs = await postgres.query(navsQuery, [tenantId]);
+    console.log(`📊 Found ${navs.length} NAVs for this tenant`);
+    
+    const navSession = neo4j['driver']!.session({ database: 'neo4j' });
+    try {
+      for (const nav of navs) {
+        await navSession.run(`
+          MERGE (n:NAV {id: $id})
+          SET n.tenant_id = $tenant_id,
+              n.fund_name = $fund_name,
+              n.investment_entity = $investment_entity,
+              n.as_of_date = $as_of_date,
+              n.nav = $nav,
+              n.created_at = $created_at,
+              n.updated_at = $updated_at
+        `, handleNullValues({
+          id: nav.id,
+          tenant_id: nav.tenant_id,
+          fund_name: nav.fund_name,
+          investment_entity: nav.investment_entity,
+          as_of_date: new Date(nav.as_of_date),
+          nav: nav.nav,
+          created_at: new Date(nav.created_at),
+          updated_at: new Date(nav.updated_at)
+        }));
+      }
+      console.log(`✅ Migrated ${navs.length} NAVs`);
+    } finally {
+      await navSession.close();
+    }
+
+    // 7. Create relationships for this tenant
     console.log(`\n🔗 Creating relationships for tenant: ${tenantId}`);
     const relationshipSession = neo4j['driver']!.session({ database: 'neo4j' });
     try {
@@ -459,6 +493,22 @@ async function migrateTenant(tenantId: string) {
       const entitySubscriptionCount = entitySubscriptionResult.records[0].get('created').toNumber();
       console.log(`✅ Created ${entitySubscriptionCount} Entity->Subscription relationships`);
 
+      // Subscription -> NAV relationships (All NAVs for historical analysis)
+      console.log('💰 Creating Subscription -> NAV relationships (All NAVs)...');
+      const subscriptionNavQuery = `
+        MATCH (s:Subscription), (n:NAV)
+        WHERE s.tenant_id = $tenant_id AND n.tenant_id = $tenant_id 
+        AND s.fund_name = n.fund_name 
+        AND s.investment_entity = n.investment_entity
+        WITH DISTINCT s, n
+        MERGE (s)-[:HAS_NAV {created_at: datetime()}]->(n)
+        RETURN count(*) as created
+      `;
+      
+      const subscriptionNavResult = await relationshipSession.run(subscriptionNavQuery, { tenant_id: tenantId });
+      const subscriptionNavCount = subscriptionNavResult.records[0].get('created').toNumber();
+      console.log(`✅ Created ${subscriptionNavCount} Subscription->NAV relationships`);
+
       // Tenant -> Fund INTEREST relationships for funds without subscriptions
       console.log('💡 Creating Tenant -> Fund INTEREST relationships...');
       const interestQuery = `
@@ -475,13 +525,13 @@ async function migrateTenant(tenantId: string) {
       const interestCount = interestResult.records[0].get('created').toNumber();
       console.log(`✅ Created ${interestCount} Tenant->Fund INTEREST relationships`);
 
-      console.log(`\n📊 Total relationships created: ${entityFundCount + fundSubscriptionCount + entitySubscriptionCount + interestCount}`);
+      console.log(`\n📊 Total relationships created: ${entityFundCount + fundSubscriptionCount + entitySubscriptionCount + subscriptionNavCount + interestCount}`);
 
     } finally {
       await relationshipSession.close();
     }
 
-    // 7. Final verification
+    // 8. Final verification
     console.log(`\n🔍 Final verification for tenant: ${tenantId}`);
     const finalSession = neo4j['driver']!.session({ database: 'neo4j' });
     try {

@@ -238,6 +238,50 @@ export const USER_CENTRIC_SCHEMA = {
           cypher: 'CREATE INDEX subscription_commitment_amount IF NOT EXISTS FOR (s:Subscription) ON (s.commitment_amount)'
         }
       ]
+    },
+
+    NAV: {
+      label: 'NAV',
+      properties: ['id', 'tenant_id', 'fund_name', 'investment_entity', 'as_of_date', 'nav', 'created_at', 'updated_at'],
+      constraints: [
+        {
+          name: 'nav_id_unique',
+          type: 'UNIQUE',
+          label: 'NAV',
+          properties: ['id'],
+          cypher: 'CREATE CONSTRAINT nav_id_unique IF NOT EXISTS FOR (n:NAV) REQUIRE n.id IS UNIQUE'
+        }
+      ],
+      indexes: [
+        {
+          name: 'nav_tenant_id',
+          label: 'NAV',
+          properties: ['tenant_id'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX nav_tenant_id IF NOT EXISTS FOR (n:NAV) ON (n.tenant_id)'
+        },
+        {
+          name: 'nav_as_of_date',
+          label: 'NAV',
+          properties: ['as_of_date'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX nav_as_of_date IF NOT EXISTS FOR (n:NAV) ON (n.as_of_date)'
+        },
+        {
+          name: 'nav_value',
+          label: 'NAV',
+          properties: ['nav'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX nav_value IF NOT EXISTS FOR (n:NAV) ON (n.nav)'
+        },
+        {
+          name: 'nav_fund_entity_date',
+          label: 'NAV',
+          properties: ['fund_name', 'investment_entity', 'as_of_date'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX nav_fund_entity_date IF NOT EXISTS FOR (n:NAV) ON (n.fund_name, n.investment_entity, n.as_of_date)'
+        }
+      ]
     }
   },
 
@@ -284,6 +328,18 @@ export const USER_CENTRIC_SCHEMA = {
     },
     {
       from: 'Subscription',
+      to: 'Tenant',
+      type: 'BELONGS_TO',
+      properties: ['created_at']
+    },
+    {
+      from: 'Subscription',
+      to: 'NAV',
+      type: 'HAS_NAV',
+      properties: ['created_at']
+    },
+    {
+      from: 'NAV',
       to: 'Tenant',
       type: 'BELONGS_TO',
       properties: ['created_at']

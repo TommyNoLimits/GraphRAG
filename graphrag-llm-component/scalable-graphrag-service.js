@@ -155,6 +155,8 @@ class ScalableGraphRAGService {
     schemaDescription += '- Tenant -[:MANAGES]-> UserEntity\n';
     schemaDescription += '- UserEntity -[:INVESTED_IN]-> UserFund\n';
     schemaDescription += '- UserFund -[:HAS_SUBSCRIPTION]-> Subscription\n';
+    schemaDescription += '- Subscription -[:HAS_NAV]-> NAV (Net Asset Value data)\n';
+    schemaDescription += '- UserEntity -[:HAS_SUBSCRIPTION]-> Subscription\n';
     schemaDescription += '- Tenant -[:INTEREST]-> UserFund (for funds without subscriptions)\n';
     
     return schemaDescription;
@@ -181,7 +183,15 @@ class ScalableGraphRAGService {
       'stage': ['UserFund'],
       'geography': ['UserFund'],
       'minimum': ['UserFund'],
-      'fee': ['UserFund']
+      'fee': ['UserFund'],
+      'nav': ['NAV'],
+      'value': ['NAV'],
+      'performance': ['NAV'],
+      'return': ['NAV'],
+      'asset': ['NAV'],
+      'valuation': ['NAV'],
+      'price': ['NAV'],
+      'worth': ['NAV']
     };
     
     // Check for keyword matches
@@ -218,7 +228,12 @@ class ScalableGraphRAGService {
       'manages': ['MANAGES'],
       'invested': ['INVESTED_IN'],
       'subscription': ['HAS_SUBSCRIPTION'],
-      'interest': ['INTEREST']
+      'interest': ['INTEREST'],
+      'nav': ['HAS_NAV'],
+      'value': ['HAS_NAV'],
+      'performance': ['HAS_NAV'],
+      'asset': ['HAS_NAV'],
+      'valuation': ['HAS_NAV']
     };
     
     for (const [keyword, relTypes] of Object.entries(relationshipMapping)) {

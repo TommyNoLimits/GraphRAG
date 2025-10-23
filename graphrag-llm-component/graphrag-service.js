@@ -41,17 +41,36 @@ Database Schema:
 - Tenant: {id, name, created_at, updated_at}
 - UserEntity: {id, tenant_id, investment_entity, entity_allias, ...}
 - UserFund: {id, tenant_id, fund_name, investment_manager_name, general_partner, investment_type, fund_type, stage, investment_minimum, management_fee, carry_fee, geography, gics_sector, liquidity, investment_summary, ...}
-- Subscription: {id, tenant_id, fund_name, investment_entity, as_of_date, commitment_amount, ...}
+- Subscription: {id, tenant_id, fund_name, investment_entity, as_of_date, commitment_amount (stored as string), ...}
+- NAV: {id, tenant_id, fund_name, investment_entity, as_of_date, nav, created_at, updated_at}
+
+IMPORTANT DATA TYPE NOTES:
+- Many numeric fields are stored as STRINGS (e.g., "11500.00", "0.00")
+- Fields like commitment_amount, nav, investment_minimum, management_fee, carry_fee are stored as strings
+- When using SUM(), AVG(), MIN(), MAX() on these fields, use toFloat() conversion
+- Example: SUM(toFloat(s.commitment_amount)) instead of SUM(s.commitment_amount)
+- Common string-numeric fields: commitment_amount, nav, investment_minimum, management_fee, carry_fee, amount, value, price, cost, total, sum, balance
 
 Relationships:
 - User -[:BELONGS_TO]-> Tenant
 - Tenant -[:MANAGES]-> UserEntity
 - UserEntity -[:INVESTED_IN]-> UserFund
 - UserFund -[:HAS_SUBSCRIPTION]-> Subscription
+- Subscription -[:HAS_NAV]-> NAV (Net Asset Value data)
 - UserEntity -[:HAS_SUBSCRIPTION]-> Subscription
 - Tenant -[:INTEREST]-> UserFund
 
 ${tenantId ? `IMPORTANT: Filter all queries by tenant_id = '${tenantId}' for data isolation.` : ''}
+
+CYPHER RULES FOR NUMERIC OPERATIONS:
+- Always use toFloat() when performing SUM(), AVG(), MIN(), MAX() on fields that might be stored as strings
+- Common string-numeric fields: commitment_amount, nav, investment_minimum, management_fee, carry_fee, amount, value, price, cost, total, sum, balance
+- Use toInteger() for whole number conversions
+- Handle potential null values with COALESCE() if needed
+- Examples: 
+  * SUM(toFloat(s.commitment_amount)) AS total_amount
+  * AVG(toFloat(nav.nav)) AS average_nav
+  * MAX(toFloat(uf.investment_minimum)) AS max_minimum
 
 Natural Language Query: "${naturalLanguageQuery}"
 
@@ -95,10 +114,95 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
       };
     } catch (error) {
       console.error('❌ Cypher execution error:', error.message);
+      
+      // Check if it's a data type error with SUM/aggregation functions
+      if (error.message.includes('SUM') && error.message.includes('can only handle numerical values')) {
+        console.log('🔧 Detected data type error - attempting to fix query...');
+        const fixedQuery = this.fixAggregationQuery(cypherQuery);
+        if (fixedQuery !== cypherQuery) {
+          console.log('🔧 Retrying with fixed query:', fixedQuery);
+          try {
+            const retryResult = await session.run(fixedQuery);
+            const retryRecords = retryResult.records.map(record => {
+              const obj = {};
+              record.keys.forEach(key => {
+                const value = record.get(key);
+                obj[key] = this.convertNeo4jValue(value);
+              });
+              return obj;
+            });
+            return {
+              records: retryRecords,
+              summary: retryResult.summary
+            };
+          } catch (retryError) {
+            console.error('❌ Retry also failed:', retryError.message);
+          }
+        }
+      }
+      
       throw new Error(`Query execution failed: ${error.message}`);
     } finally {
       await session.close();
     }
+  }
+
+  /**
+   * Fix common aggregation query issues
+   */
+  fixAggregationQuery(query) {
+    // Define fields that are known to be stored as strings but should be numeric
+    const stringNumericFields = [
+      'commitment_amount',
+      'nav',
+      'investment_minimum',
+      'management_fee',
+      'carry_fee',
+      'amount',
+      'value',
+      'price',
+      'cost',
+      'total',
+      'sum',
+      'balance'
+    ];
+    
+    let fixedQuery = query;
+    
+    // Fix aggregation functions for known string-numeric fields
+    for (const field of stringNumericFields) {
+      // Fix SUM() operations
+      fixedQuery = fixedQuery.replace(
+        new RegExp(`SUM\\(([^)]*\\.${field})\\)`, 'g'),
+        `SUM(toFloat($1.${field}))`
+      );
+      
+      // Fix AVG() operations
+      fixedQuery = fixedQuery.replace(
+        new RegExp(`AVG\\(([^)]*\\.${field})\\)`, 'g'),
+        `AVG(toFloat($1.${field}))`
+      );
+      
+      // Fix MIN() operations
+      fixedQuery = fixedQuery.replace(
+        new RegExp(`MIN\\(([^)]*\\.${field})\\)`, 'g'),
+        `MIN(toFloat($1.${field}))`
+      );
+      
+      // Fix MAX() operations
+      fixedQuery = fixedQuery.replace(
+        new RegExp(`MAX\\(([^)]*\\.${field})\\)`, 'g'),
+        `MAX(toFloat($1.${field}))`
+      );
+      
+      // Fix COUNT() operations (though COUNT usually works on any type)
+      fixedQuery = fixedQuery.replace(
+        new RegExp(`COUNT\\(([^)]*\\.${field})\\)`, 'g'),
+        `COUNT($1.${field})`
+      );
+    }
+    
+    return fixedQuery;
   }
 
   /**

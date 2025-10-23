@@ -32,6 +32,21 @@ async function testGraphRAG() {
         name: 'Fund Manager Search',
         query: 'Show me funds managed by CAZ Investments LP',
         tenantId: 'fd68d10f-0780-4140-b393-3adf8109df4f'
+      },
+      {
+        name: 'NAV Performance Query',
+        query: 'What is the NAV performance for CAZ Private Equity Ownership II?',
+        tenantId: 'fd68d10f-0780-4140-b393-3adf8109df4f'
+      },
+      {
+        name: 'Portfolio Value Query',
+        query: 'Show me the current portfolio value and NAV data for all investments',
+        tenantId: 'fd68d10f-0780-4140-b393-3adf8109df4f'
+      },
+      {
+        name: 'Investment Returns Query',
+        query: 'What are the investment returns and asset values over time?',
+        tenantId: 'fd68d10f-0780-4140-b393-3adf8109df4f'
       }
     ];
 
@@ -64,6 +79,14 @@ async function testGraphRAG() {
       {
         name: 'Fund Details',
         query: 'MATCH (uf:UserFund) WHERE uf.tenant_id = "fd68d10f-0780-4140-b393-3adf8109df4f" RETURN uf.fund_name, uf.investment_manager_name, uf.fund_type LIMIT 5'
+      },
+      {
+        name: 'NAV Data',
+        query: 'MATCH (n:NAV) WHERE n.tenant_id = "fd68d10f-0780-4140-b393-3adf8109df4f" RETURN n.fund_name, n.nav, n.as_of_date ORDER BY n.as_of_date DESC LIMIT 5'
+      },
+      {
+        name: 'Subscription-NAV Relationships',
+        query: 'MATCH (s:Subscription)-[:HAS_NAV]->(n:NAV) WHERE s.tenant_id = "fd68d10f-0780-4140-b393-3adf8109df4f" RETURN s.fund_name, s.commitment_amount, n.nav, n.as_of_date LIMIT 5'
       }
     ];
 
