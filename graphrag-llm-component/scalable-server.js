@@ -1,11 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const GraphRAGService = require('./graphrag-service');
+const ScalableGraphRAGService = require('./scalable-graphrag-service');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002; // Different port to avoid conflicts
 
 // Middleware
 app.use(cors());
@@ -25,8 +25,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize GraphRAG service
-const graphRAG = new GraphRAGService();
+// Initialize Scalable GraphRAG service
+const graphRAG = new ScalableGraphRAGService();
 
 // Connect to Neo4j on startup
 graphRAG.connect().catch(console.error);
@@ -34,7 +34,7 @@ graphRAG.connect().catch(console.error);
 // API Routes
 
 /**
- * Process natural language query
+ * Process natural language query with scalable service
  */
 app.post('/api/query', async (req, res) => {
   try {
@@ -44,7 +44,7 @@ app.post('/api/query', async (req, res) => {
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    console.log(`🔍 Processing query: "${query}" for tenant: ${tenantId || 'all'}`);
+    console.log(`🔍 [SCALABLE] Processing query: "${query}" for tenant: ${tenantId || 'all'}`);
     
     const result = await graphRAG.processQuery(query, tenantId);
     res.json(result);
@@ -55,50 +55,17 @@ app.post('/api/query', async (req, res) => {
 });
 
 /**
- * Get user's investment journey
+ * Get schema statistics
  */
-app.get('/api/user/:email/journey', async (req, res) => {
+app.get('/api/schema-stats', async (req, res) => {
   try {
-    const { email } = req.params;
-    const { tenantId } = req.query;
-    
-    if (!tenantId) {
-      return res.status(400).json({ error: 'tenantId is required' });
-    }
-
-    console.log(`👤 Getting investment journey for: ${email} in tenant: ${tenantId}`);
-    
-    const result = await graphRAG.getUserInvestmentJourney(email, tenantId);
+    const stats = await graphRAG.getSchemaStats();
     res.json({
       success: true,
-      results: result.records
+      stats: stats
     });
   } catch (error) {
-    console.error('❌ Journey query error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-/**
- * Search funds
- */
-app.post('/api/funds/search', async (req, res) => {
-  try {
-    const { searchCriteria, tenantId } = req.body;
-    
-    if (!tenantId) {
-      return res.status(400).json({ error: 'tenantId is required' });
-    }
-
-    console.log(`💰 Searching funds with criteria:`, searchCriteria);
-    
-    const result = await graphRAG.searchFunds(searchCriteria, tenantId);
-    res.json({
-      success: true,
-      results: result.records
-    });
-  } catch (error) {
-    console.error('❌ Fund search error:', error);
+    console.error('❌ Schema stats error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -114,6 +81,7 @@ app.get('/api/health', async (req, res) => {
     res.json({
       status: 'healthy',
       neo4j: 'connected',
+      service: 'scalable-graphrag',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -170,12 +138,12 @@ process.on('SIGTERM', async () => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 GraphRAG LLM Component running on port ${PORT}`);
+  console.log(`🚀 Scalable GraphRAG LLM Component running on port ${PORT}`);
   console.log(`📊 API endpoints:`);
-  console.log(`   POST /api/query - Process natural language queries`);
-  console.log(`   GET  /api/user/:email/journey - Get user investment journey`);
-  console.log(`   POST /api/funds/search - Search funds`);
+  console.log(`   POST /api/query - Process natural language queries (SCALABLE)`);
+  console.log(`   GET  /api/schema-stats - Schema statistics`);
   console.log(`   GET  /api/health - Health check`);
   console.log(`   GET  /api/stats - Database statistics`);
   console.log(`🌐 Frontend: http://localhost:${PORT}`);
+  console.log(`🔧 Service: Scalable GraphRAG with dynamic schema discovery`);
 });

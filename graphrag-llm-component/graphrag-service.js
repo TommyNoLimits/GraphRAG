@@ -12,7 +12,7 @@ class GraphRAGService {
 
     // Initialize Gemini
     this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+    this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   }
 
   async connect() {
@@ -133,6 +133,11 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
       return value.toString();
     }
     
+    // Handle BigInt values that might not be Neo4j Int types
+    if (typeof value === 'bigint') {
+      return Number(value);
+    }
+    
     if (typeof value === 'object' && value !== null) {
       if (Array.isArray(value)) {
         return value.map(item => this.convertNeo4jValue(item));
@@ -149,19 +154,84 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
   }
 
   /**
-   * Process natural language query and return results
+   * Generate plain English explanation of query results
+   */
+  async generatePlainEnglishExplanation(naturalLanguageQuery, cypherQuery, results, tenantId = null) {
+    // Safely stringify results to avoid template literal issues
+    let resultsData = '';
+    try {
+      resultsData = JSON.stringify(results.slice(0, 5), null, 2);
+    } catch (error) {
+      resultsData = 'Results data unavailable';
+    }
+    
+    const resultsCount = results.length;
+    const resultsSuffix = resultsCount > 5 ? `\n... (showing first 5 of ${resultsCount} results)` : '';
+    
+    const prompt = `You are a financial advisor and portfolio analyst. Analyze the following investment data and provide a clear, detailed explanation in plain English.
+
+Original Question: "${naturalLanguageQuery}"
+Generated Cypher Query: "${cypherQuery}"
+Number of Results: ${resultsCount}
+
+Results Data:
+${resultsData}${resultsSuffix}
+
+Please provide:
+1. A clear answer to the user's question
+2. Key insights and analysis
+3. Important details about each investment
+4. Any patterns or trends you notice
+5. Recommendations or observations
+
+Format your response as a comprehensive portfolio analysis that a client would understand.`;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      return response.text().trim();
+    } catch (error) {
+      console.error('❌ Explanation generation error:', error.message);
+      return `Analysis completed. Found ${resultsCount} results matching your query.`;
+    }
+  }
+
+  /**
+   * Process natural language query and return results with explanations
    */
   async processQuery(naturalLanguageQuery, tenantId = null) {
     try {
-      // Generate Cypher query using Gemini
-      const cypherQuery = await this.generateCypherQuery(naturalLanguageQuery, tenantId);
+      // Check if this looks like a direct Cypher query
+      const isDirectCypher = naturalLanguageQuery.trim().toUpperCase().startsWith('MATCH') || 
+                            naturalLanguageQuery.trim().toUpperCase().startsWith('RETURN') ||
+                            naturalLanguageQuery.trim().toUpperCase().startsWith('WITH');
+      
+      let cypherQuery;
+      
+      if (isDirectCypher) {
+        // Use the query directly as Cypher
+        cypherQuery = naturalLanguageQuery;
+        console.log('🔍 Direct Cypher query detected:', cypherQuery);
+      } else {
+        // Generate Cypher query using Gemini
+        cypherQuery = await this.generateCypherQuery(naturalLanguageQuery, tenantId);
+      }
       
       // Execute the query
       const result = await this.executeQuery(cypherQuery);
       
+      // Generate plain English explanation
+      const explanation = await this.generatePlainEnglishExplanation(
+        naturalLanguageQuery, 
+        cypherQuery, 
+        result.records, 
+        tenantId
+      );
+      
       return {
         success: true,
         query: cypherQuery,
+        explanation: explanation,
         results: result.records,
         summary: {
           recordsReturned: result.records.length,
@@ -173,6 +243,7 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
         success: false,
         error: error.message,
         query: null,
+        explanation: null,
         results: []
       };
     }

@@ -13,6 +13,25 @@ import { DateTime } from 'neo4j-driver';
 
 dotenv.config();
 
+/**
+ * Utility function to handle null values consistently for GraphRAG
+ * Replaces null/undefined values with "__NULL__" placeholder to ensure
+ * all properties are preserved in Neo4j for consistent schema
+ */
+function handleNullValues(obj: any): any {
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === null || value === undefined) {
+      result[key] = "__NULL__";
+    } else if (value instanceof Date) {
+      result[key] = DateTime.fromStandardDate(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 async function migrateTenant(tenantId: string) {
   console.log(`🏢 Starting Tenant-Specific Migration for: ${tenantId}`);
   
@@ -107,7 +126,7 @@ async function migrateTenant(tenantId: string) {
               u.updated_at = $updated_at
           MERGE (t:Tenant {id: $tenant_id})
           MERGE (u)-[:BELONGS_TO {created_at: $created_at}]->(t)
-        `, {
+        `, handleNullValues({
           id: user.id,
           tenant_id: user.tenant_id,
           username: user.username,
@@ -121,12 +140,12 @@ async function migrateTenant(tenantId: string) {
           phone_number: user.phone_number,
           phone_number_confirmed: user.phone_number_confirmed,
           two_factor_enabled: user.two_factor_enabled,
-          lockout_end: user.lockout_end ? DateTime.fromStandardDate(new Date(user.lockout_end)) : null,
+          lockout_end: user.lockout_end ? new Date(user.lockout_end) : null,
           lockout_enabled: user.lockout_enabled,
           access_failed_count: user.access_failed_count,
           is_mfa_enabled: user.is_mfa_enabled,
           mfa_code: user.mfa_code,
-          mfa_code_expiry: user.mfa_code_expiry ? DateTime.fromStandardDate(new Date(user.mfa_code_expiry)) : null,
+          mfa_code_expiry: user.mfa_code_expiry ? new Date(user.mfa_code_expiry) : null,
           first_name: user.first_name,
           last_name: user.last_name,
           call_notifications: user.call_notifications,
@@ -137,10 +156,10 @@ async function migrateTenant(tenantId: string) {
           pipeline_notifications: user.pipeline_notifications,
           forwarding_email: user.forwarding_email,
           plaid_consent: user.plaid_consent,
-          plaid_consent_date: user.plaid_consent_date ? DateTime.fromStandardDate(new Date(user.plaid_consent_date)) : null,
-          created_at: DateTime.fromStandardDate(new Date(user.created_at)),
-          updated_at: DateTime.fromStandardDate(new Date(user.updated_at))
-        });
+          plaid_consent_date: user.plaid_consent_date ? new Date(user.plaid_consent_date) : null,
+          created_at: new Date(user.created_at),
+          updated_at: new Date(user.updated_at)
+        }));
       }
       console.log(`✅ Migrated ${users.length} users`);
     } finally {
@@ -165,14 +184,14 @@ async function migrateTenant(tenantId: string) {
               ue.updated_at = $updated_at
           MERGE (t:Tenant {id: $tenant_id})
           MERGE (t)-[:MANAGES {created_at: $created_at}]->(ue)
-        `, {
+        `, handleNullValues({
           id: entity.id,
           tenant_id: entity.tenant_id,
           investment_entity: entity.investment_entity,
           entity_allias: entity.entity_allias,
-          created_at: DateTime.fromStandardDate(new Date(entity.created_at)),
-          updated_at: DateTime.fromStandardDate(new Date(entity.updated_at))
-        });
+          created_at: new Date(entity.created_at),
+          updated_at: new Date(entity.updated_at)
+        }));
       }
       console.log(`✅ Migrated ${entities.length} entities`);
     } finally {
@@ -268,7 +287,7 @@ async function migrateTenant(tenantId: string) {
               uf.investment_notes = $investment_notes,
               uf.created_at = $created_at,
               uf.updated_at = $updated_at
-        `, {
+        `, handleNullValues({
           id: fund.id,
           tenant_id: fund.tenant_id,
           fund_name: fund.fund_name,
@@ -344,11 +363,11 @@ async function migrateTenant(tenantId: string) {
           sub_doc_received: fund.sub_doc_received,
           pass_reason: fund.pass_reason,
           pass_explanation: fund.pass_explanation,
-          stage_last_updated: fund.stage_last_updated ? DateTime.fromStandardDate(new Date(fund.stage_last_updated)) : null,
+          stage_last_updated: fund.stage_last_updated ? new Date(fund.stage_last_updated) : null,
           investment_notes: fund.investment_notes,
-          created_at: DateTime.fromStandardDate(new Date(fund.created_at)),
-          updated_at: DateTime.fromStandardDate(new Date(fund.updated_at))
-        });
+          created_at: new Date(fund.created_at),
+          updated_at: new Date(fund.updated_at)
+        }));
       }
       console.log(`✅ Migrated ${funds.length} funds`);
     } finally {
@@ -373,16 +392,16 @@ async function migrateTenant(tenantId: string) {
               s.commitment_amount = $commitment_amount,
               s.created_at = $created_at,
               s.updated_at = $updated_at
-        `, {
+        `, handleNullValues({
           id: subscription.id,
           tenant_id: subscription.tenant_id,
           fund_name: subscription.fund_name,
           investment_entity: subscription.investment_entity,
-          as_of_date: DateTime.fromStandardDate(new Date(subscription.as_of_date)),
+          as_of_date: new Date(subscription.as_of_date),
           commitment_amount: subscription.commitment_amount,
-          created_at: DateTime.fromStandardDate(new Date(subscription.created_at)),
-          updated_at: DateTime.fromStandardDate(new Date(subscription.updated_at))
-        });
+          created_at: new Date(subscription.created_at),
+          updated_at: new Date(subscription.updated_at)
+        }));
       }
       console.log(`✅ Migrated ${subscriptions.length} subscriptions`);
     } finally {

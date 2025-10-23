@@ -12,7 +12,7 @@ class ScalableGraphRAGService {
 
     // Initialize Gemini
     this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+    this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     // Schema cache for performance
     this.schemaCache = new Map();
@@ -62,19 +62,24 @@ class ScalableGraphRAGService {
       const nodeLabelsResult = await session.run(nodeLabelsQuery);
       const labels = nodeLabelsResult.records[0]?.get('labels') || [];
       
-      // Get sample properties for each label
+      // Get ALL properties for each label (from all nodes, not just first one)
       const schema = {};
       
       for (const label of labels) {
         const propertiesQuery = `
           MATCH (n:\`${label}\`)
-          RETURN keys(n) as properties
-          LIMIT 1
+          RETURN DISTINCT keys(n) as properties
         `;
         
         const propertiesResult = await session.run(propertiesQuery);
         if (propertiesResult.records.length > 0) {
-          schema[label] = propertiesResult.records[0].get('properties');
+          // Collect all unique properties from all nodes of this type
+          const allProperties = new Set();
+          propertiesResult.records.forEach(record => {
+            const properties = record.get('properties');
+            properties.forEach(prop => allProperties.add(prop));
+          });
+          schema[label] = Array.from(allProperties).sort();
         }
       }
       
@@ -115,18 +120,28 @@ class ScalableGraphRAGService {
     const fullSchema = await this.loadSchema();
     
     // Analyze query to determine relevant node types
-    const relevantNodes = this.identifyRelevantNodes(naturalLanguageQuery, fullSchema.nodes);
+    const relevantNodes = this.identifyRelevantNodes(naturalLanguageQuery, fullSchema.nodes, tenantId);
+    
+    // Always include Tenant node for tenant-centric queries
+    if (tenantId && fullSchema.nodes.Tenant) {
+      relevantNodes.add('Tenant');
+    }
     
     // Build focused schema description
-    let schemaDescription = 'Database Schema:\n';
+    let schemaDescription = 'Database Schema (Tenant-Centric Investment Portfolio):\n\n';
     
+    // Show all relevant node types with their properties
     for (const [label, properties] of Object.entries(fullSchema.nodes)) {
       if (relevantNodes.has(label)) {
-        schemaDescription += `- ${label}: {${properties.slice(0, 10).join(', ')}${properties.length > 10 ? ', ...' : ''}}\n`;
+        schemaDescription += `- ${label}: {\n`;
+        properties.forEach(prop => {
+          schemaDescription += `    ${prop}: <value>,\n`;
+        });
+        schemaDescription += `  }\n\n`;
       }
     }
     
-    schemaDescription += '\nKey Relationships:\n';
+    schemaDescription += 'Key Relationships (Tenant-Centric Flow):\n';
     
     // Add relevant relationships based on query context
     const relevantRelationships = this.identifyRelevantRelationships(naturalLanguageQuery, fullSchema.relationships);
@@ -134,13 +149,21 @@ class ScalableGraphRAGService {
       schemaDescription += `- ${relType}\n`;
     }
     
+    // Add relationship flow explanation
+    schemaDescription += '\nRelationship Flow:\n';
+    schemaDescription += '- User -[:BELONGS_TO]-> Tenant\n';
+    schemaDescription += '- Tenant -[:MANAGES]-> UserEntity\n';
+    schemaDescription += '- UserEntity -[:INVESTED_IN]-> UserFund\n';
+    schemaDescription += '- UserFund -[:HAS_SUBSCRIPTION]-> Subscription\n';
+    schemaDescription += '- Tenant -[:INTEREST]-> UserFund (for funds without subscriptions)\n';
+    
     return schemaDescription;
   }
 
   /**
    * Identify which node types are relevant to the query
    */
-  identifyRelevantNodes(query, nodes) {
+  identifyRelevantNodes(query, nodes, tenantId = null) {
     const relevantNodes = new Set();
     const queryLower = query.toLowerCase();
     
@@ -221,17 +244,25 @@ class ScalableGraphRAGService {
       // Generate focused schema based on query context
       const focusedSchema = await this.generateFocusedSchema(naturalLanguageQuery, tenantId);
       
-      const prompt = `
-You are a Neo4j Cypher query expert. Convert the following natural language query into a Cypher query.
+      // Safely handle tenantId in template literal
+      const tenantFilter = tenantId ? `IMPORTANT: Filter all queries by tenant_id = '${tenantId}' for data isolation.` : '';
+      
+      const prompt = `You are a Neo4j Cypher query expert specializing in tenant-centric investment portfolios. Convert the following natural language query into a Cypher query.
 
 ${focusedSchema}
 
-${tenantId ? `IMPORTANT: Filter all queries by tenant_id = '${tenantId}' for data isolation.` : ''}
+${tenantFilter}
+
+IMPORTANT CYPHER RULES:
+- Use single quotes for string literals: 'value'
+- Use double quotes for property names with spaces: n.\`property name\`
+- NEVER use curly braces {} for parameters - use literal values instead
+- Always filter by tenant_id for data isolation
+- Use proper Cypher syntax - no JavaScript-style parameters
 
 Natural Language Query: "${naturalLanguageQuery}"
 
-Return ONLY the Cypher query, no explanations or markdown formatting.
-`;
+Return ONLY the Cypher query, no explanations or markdown formatting.`;
 
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
@@ -311,6 +342,11 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
       return value.toString();
     }
     
+    // Handle BigInt values that might not be Neo4j Int types
+    if (typeof value === 'bigint') {
+      return Number(value);
+    }
+    
     if (typeof value === 'object' && value !== null) {
       if (Array.isArray(value)) {
         return value.map(item => this.convertNeo4jValue(item));
@@ -327,19 +363,84 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
   }
 
   /**
-   * Process natural language query with enhanced error handling
+   * Generate plain English explanation of query results
+   */
+  async generatePlainEnglishExplanation(naturalLanguageQuery, cypherQuery, results, tenantId = null) {
+    // Safely stringify results to avoid template literal issues
+    let resultsData = '';
+    try {
+      resultsData = JSON.stringify(results.slice(0, 5), null, 2);
+    } catch (error) {
+      resultsData = 'Results data unavailable';
+    }
+    
+    const resultsCount = results.length;
+    const resultsSuffix = resultsCount > 5 ? `\n... (showing first 5 of ${resultsCount} results)` : '';
+    
+    const prompt = `You are a financial advisor and portfolio analyst. Analyze the following investment data and provide a clear, detailed explanation in plain English.
+
+Original Question: "${naturalLanguageQuery}"
+Generated Cypher Query: "${cypherQuery}"
+Number of Results: ${resultsCount}
+
+Results Data:
+${resultsData}${resultsSuffix}
+
+Please provide:
+1. A clear answer to the user's question
+2. Key insights and analysis
+3. Important details about each investment
+4. Any patterns or trends you notice
+5. Recommendations or observations
+
+Format your response as a comprehensive portfolio analysis that a client would understand.`;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      return response.text().trim();
+    } catch (error) {
+      console.error('❌ Explanation generation error:', error.message);
+      return `Analysis completed. Found ${resultsCount} results matching your query.`;
+    }
+  }
+
+  /**
+   * Process natural language query with enhanced error handling and explanations
    */
   async processQuery(naturalLanguageQuery, tenantId = null) {
     try {
-      // Generate Cypher query using focused schema
-      const cypherQuery = await this.generateCypherQuery(naturalLanguageQuery, tenantId);
+      // Check if this looks like a direct Cypher query
+      const isDirectCypher = naturalLanguageQuery.trim().toUpperCase().startsWith('MATCH') || 
+                            naturalLanguageQuery.trim().toUpperCase().startsWith('RETURN') ||
+                            naturalLanguageQuery.trim().toUpperCase().startsWith('WITH');
+      
+      let cypherQuery;
+      
+      if (isDirectCypher) {
+        // Use the query directly as Cypher
+        cypherQuery = naturalLanguageQuery;
+        console.log('🔍 Direct Cypher query detected:', cypherQuery);
+      } else {
+        // Generate Cypher query using focused schema
+        cypherQuery = await this.generateCypherQuery(naturalLanguageQuery, tenantId);
+      }
       
       // Execute the query
       const result = await this.executeQuery(cypherQuery);
       
+      // Generate plain English explanation
+      const explanation = await this.generatePlainEnglishExplanation(
+        naturalLanguageQuery, 
+        cypherQuery, 
+        result.records, 
+        tenantId
+      );
+      
       return {
         success: true,
         query: cypherQuery,
+        explanation: explanation,
         results: result.records,
         summary: {
           recordsReturned: result.records.length,
@@ -351,6 +452,7 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
         success: false,
         error: error.message,
         query: null,
+        explanation: null,
         results: []
       };
     }
