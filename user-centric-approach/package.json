@@ -21,6 +21,7 @@
     "migrate:user-funds:limit": "ts-node migrations/user-funds-migration.ts --limit=",
     "migrate:user-centric": "ts-node migrations/user-centric-migration.ts",
     "migrate:user-centric:limit": "ts-node migrations/user-centric-migration.ts --limit=",
+    "migrate:tenant": "ts-node scripts/migrate-tenant.ts --tenant-id=",
     "view:connected-data": "ts-node scripts/view-connected-data.ts",
     "fix:tenant-relationships": "ts-node scripts/fix-tenant-relationships.ts",
     
