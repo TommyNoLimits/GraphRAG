@@ -170,12 +170,14 @@ export interface Document {
 }
 
 export interface NAV {
-  id: number;
+  id: string;  // Composite key: "nav_{fund_name}_{investment_entity}"
   tenant_id: string;
   fund_name: string;
   investment_entity: string;
-  as_of_date: Date;
-  nav: number;
+  nav_values: Record<string, string>;  // Date -> NAV value pairs: {"2023-01-01": "100.00"}
+  latest_nav: string;  // Most recent NAV value
+  latest_date: string;  // Most recent NAV date
+  nav_count: number;  // Number of historical NAV entries
   created_at?: Date;
   updated_at?: Date;
 }

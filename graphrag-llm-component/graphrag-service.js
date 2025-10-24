@@ -42,14 +42,22 @@ Database Schema:
 - UserEntity: {id, tenant_id, investment_entity, entity_allias, ...}
 - UserFund: {id, tenant_id, fund_name, investment_manager_name, general_partner, investment_type, fund_type, stage, investment_minimum, management_fee, carry_fee, geography, gics_sector, liquidity, investment_summary, ...}
 - Subscription: {id, tenant_id, fund_name, investment_entity, as_of_date, commitment_amount (stored as string), ...}
-- NAV: {id, tenant_id, fund_name, investment_entity, as_of_date, nav, created_at, updated_at}
+- NAV: {id, tenant_id, fund_name, investment_entity, nav_values (object with date->value pairs), latest_nav, latest_date, nav_count, created_at, updated_at}
 
 IMPORTANT DATA TYPE NOTES:
 - Many numeric fields are stored as STRINGS (e.g., "11500.00", "0.00")
-- Fields like commitment_amount, nav, investment_minimum, management_fee, carry_fee are stored as strings
+- Fields like commitment_amount, latest_nav, investment_minimum, management_fee, carry_fee are stored as strings
 - When using SUM(), AVG(), MIN(), MAX() on these fields, use toFloat() conversion
 - Example: SUM(toFloat(s.commitment_amount)) instead of SUM(s.commitment_amount)
-- Common string-numeric fields: commitment_amount, nav, investment_minimum, management_fee, carry_fee, amount, value, price, cost, total, sum, balance
+- Common string-numeric fields: commitment_amount, latest_nav, investment_minimum, management_fee, carry_fee, amount, value, price, cost, total, sum, balance
+
+NAV QUERY PATTERNS:
+- Use n.latest_nav for most recent NAV value
+- Use n.latest_date for most recent NAV date  
+- Use n.nav_values (JSON string) to get all historical NAV data
+- Use n.nav_count to know how many historical entries exist
+- nav_values is stored as a JSON string, not an object
+- Example: Parse n.nav_values in application code to access specific dates
 
 Relationships:
 - User -[:BELONGS_TO]-> Tenant
@@ -64,13 +72,19 @@ ${tenantId ? `IMPORTANT: Filter all queries by tenant_id = '${tenantId}' for dat
 
 CYPHER RULES FOR NUMERIC OPERATIONS:
 - Always use toFloat() when performing SUM(), AVG(), MIN(), MAX() on fields that might be stored as strings
-- Common string-numeric fields: commitment_amount, nav, investment_minimum, management_fee, carry_fee, amount, value, price, cost, total, sum, balance
+- Common string-numeric fields: commitment_amount, latest_nav, investment_minimum, management_fee, carry_fee, amount, value, price, cost, total, sum, balance
 - Use toInteger() for whole number conversions
 - Handle potential null values with COALESCE() if needed
 - Examples: 
   * SUM(toFloat(s.commitment_amount)) AS total_amount
-  * AVG(toFloat(nav.nav)) AS average_nav
+  * AVG(toFloat(nav.latest_nav)) AS average_nav
   * MAX(toFloat(uf.investment_minimum)) AS max_minimum
+
+NAV-SPECIFIC QUERY EXAMPLES:
+- Latest NAV: RETURN nav.latest_nav, nav.latest_date
+- All NAVs for fund: RETURN nav.nav_values, nav.nav_count
+- NAV aggregation: SUM(toFloat(nav.latest_nav)) AS total_nav
+- NAV statistics: AVG(toFloat(nav.latest_nav)) AS avg_nav
 
 Natural Language Query: "${naturalLanguageQuery}"
 
@@ -154,7 +168,7 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
     // Define fields that are known to be stored as strings but should be numeric
     const stringNumericFields = [
       'commitment_amount',
-      'nav',
+      'latest_nav',  // Updated from 'nav' to 'latest_nav'
       'investment_minimum',
       'management_fee',
       'carry_fee',

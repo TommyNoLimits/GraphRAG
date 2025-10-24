@@ -242,7 +242,18 @@ export const USER_CENTRIC_SCHEMA = {
 
     NAV: {
       label: 'NAV',
-      properties: ['id', 'tenant_id', 'fund_name', 'investment_entity', 'as_of_date', 'nav', 'created_at', 'updated_at'],
+      properties: [
+        'id', 
+        'tenant_id', 
+        'fund_name', 
+        'investment_entity', 
+        'nav_values',  // Object with date->value pairs: {"2023-01-01": "100.00", "2023-02-01": "105.00"}
+        'latest_nav',  // Most recent NAV value
+        'latest_date', // Most recent NAV date
+        'nav_count',   // Number of historical NAV entries
+        'created_at', 
+        'updated_at'
+      ],
       constraints: [
         {
           name: 'nav_id_unique',
@@ -250,6 +261,13 @@ export const USER_CENTRIC_SCHEMA = {
           label: 'NAV',
           properties: ['id'],
           cypher: 'CREATE CONSTRAINT nav_id_unique IF NOT EXISTS FOR (n:NAV) REQUIRE n.id IS UNIQUE'
+        },
+        {
+          name: 'nav_fund_entity_unique',
+          type: 'UNIQUE',
+          label: 'NAV',
+          properties: ['fund_name', 'investment_entity', 'tenant_id'],
+          cypher: 'CREATE CONSTRAINT nav_fund_entity_unique IF NOT EXISTS FOR (n:NAV) REQUIRE (n.fund_name, n.investment_entity, n.tenant_id) IS UNIQUE'
         }
       ],
       indexes: [
@@ -261,25 +279,39 @@ export const USER_CENTRIC_SCHEMA = {
           cypher: 'CREATE INDEX nav_tenant_id IF NOT EXISTS FOR (n:NAV) ON (n.tenant_id)'
         },
         {
-          name: 'nav_as_of_date',
+          name: 'nav_fund_name',
           label: 'NAV',
-          properties: ['as_of_date'],
+          properties: ['fund_name'],
           type: 'BTREE',
-          cypher: 'CREATE INDEX nav_as_of_date IF NOT EXISTS FOR (n:NAV) ON (n.as_of_date)'
+          cypher: 'CREATE INDEX nav_fund_name IF NOT EXISTS FOR (n:NAV) ON (n.fund_name)'
         },
         {
-          name: 'nav_value',
+          name: 'nav_investment_entity',
           label: 'NAV',
-          properties: ['nav'],
+          properties: ['investment_entity'],
           type: 'BTREE',
-          cypher: 'CREATE INDEX nav_value IF NOT EXISTS FOR (n:NAV) ON (n.nav)'
+          cypher: 'CREATE INDEX nav_investment_entity IF NOT EXISTS FOR (n:NAV) ON (n.investment_entity)'
         },
         {
-          name: 'nav_fund_entity_date',
+          name: 'nav_latest_date',
           label: 'NAV',
-          properties: ['fund_name', 'investment_entity', 'as_of_date'],
+          properties: ['latest_date'],
           type: 'BTREE',
-          cypher: 'CREATE INDEX nav_fund_entity_date IF NOT EXISTS FOR (n:NAV) ON (n.fund_name, n.investment_entity, n.as_of_date)'
+          cypher: 'CREATE INDEX nav_latest_date IF NOT EXISTS FOR (n:NAV) ON (n.latest_date)'
+        },
+        {
+          name: 'nav_latest_value',
+          label: 'NAV',
+          properties: ['latest_nav'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX nav_latest_value IF NOT EXISTS FOR (n:NAV) ON (n.latest_nav)'
+        },
+        {
+          name: 'nav_fund_entity',
+          label: 'NAV',
+          properties: ['fund_name', 'investment_entity'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX nav_fund_entity IF NOT EXISTS FOR (n:NAV) ON (n.fund_name, n.investment_entity)'
         }
       ]
     }

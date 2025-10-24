@@ -408,36 +408,89 @@ async function migrateTenant(tenantId: string) {
       await subscriptionSession.close();
     }
 
-    // 6. Migrate NAVs for this tenant
+    // 6. Migrate NAVs for this tenant (Consolidated Structure)
     console.log(`\n💰 Migrating NAVs for tenant: ${tenantId}`);
-    const navsQuery = `SELECT * FROM navs WHERE tenant_id = $1`;
+    const navsQuery = `SELECT * FROM navs WHERE tenant_id = $1 ORDER BY fund_name, investment_entity, as_of_date`;
     const navs = await postgres.query(navsQuery, [tenantId]);
     console.log(`📊 Found ${navs.length} NAVs for this tenant`);
     
+    // Group NAVs by fund_name + investment_entity combination
+    const navGroups = new Map<string, any[]>();
+    for (const nav of navs) {
+      const key = `${nav.fund_name}|${nav.investment_entity}`;
+      if (!navGroups.has(key)) {
+        navGroups.set(key, []);
+      }
+      navGroups.get(key)!.push(nav);
+    }
+    
+    console.log(`📊 Grouped into ${navGroups.size} unique fund/entity combinations`);
+    
     const navSession = neo4j['driver']!.session({ database: 'neo4j' });
     try {
-      for (const nav of navs) {
+      for (const [key, navGroup] of navGroups) {
+        const [fundName, investmentEntity] = key.split('|');
+        
+        // Build nav_values object
+        const navValues: Record<string, string> = {};
+        let latestNav = '';
+        let latestDate = '';
+        let earliestCreatedAt = '';
+        let latestUpdatedAt = '';
+        
+        for (const nav of navGroup) {
+          const dateStr = new Date(nav.as_of_date).toISOString().split('T')[0]; // YYYY-MM-DD format
+          const navValue = nav.nav.toString();
+          
+          navValues[dateStr] = navValue;
+          
+          // Track latest values
+          if (!latestDate || dateStr > latestDate) {
+            latestDate = dateStr;
+            latestNav = navValue;
+          }
+          
+          // Track timestamps
+          const createdAt = new Date(nav.created_at).toISOString();
+          const updatedAt = new Date(nav.updated_at).toISOString();
+          
+          if (!earliestCreatedAt || createdAt < earliestCreatedAt) {
+            earliestCreatedAt = createdAt;
+          }
+          
+          if (!latestUpdatedAt || updatedAt > latestUpdatedAt) {
+            latestUpdatedAt = updatedAt;
+          }
+        }
+        
+        // Create consolidated NAV node
+        const consolidatedId = `nav_${fundName.replace(/[^a-zA-Z0-9]/g, '_')}_${investmentEntity.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        
         await navSession.run(`
           MERGE (n:NAV {id: $id})
           SET n.tenant_id = $tenant_id,
               n.fund_name = $fund_name,
               n.investment_entity = $investment_entity,
-              n.as_of_date = $as_of_date,
-              n.nav = $nav,
+              n.nav_values = $nav_values,
+              n.latest_nav = $latest_nav,
+              n.latest_date = $latest_date,
+              n.nav_count = $nav_count,
               n.created_at = $created_at,
               n.updated_at = $updated_at
         `, handleNullValues({
-          id: nav.id,
-          tenant_id: nav.tenant_id,
-          fund_name: nav.fund_name,
-          investment_entity: nav.investment_entity,
-          as_of_date: new Date(nav.as_of_date),
-          nav: nav.nav,
-          created_at: new Date(nav.created_at),
-          updated_at: new Date(nav.updated_at)
+          id: consolidatedId,
+          tenant_id: tenantId,
+          fund_name: fundName,
+          investment_entity: investmentEntity,
+          nav_values: JSON.stringify(navValues),
+          latest_nav: latestNav,
+          latest_date: latestDate,
+          nav_count: navGroup.length,
+          created_at: new Date(earliestCreatedAt),
+          updated_at: new Date(latestUpdatedAt)
         }));
       }
-      console.log(`✅ Migrated ${navs.length} NAVs`);
+      console.log(`✅ Migrated ${navGroups.size} consolidated NAV nodes (from ${navs.length} individual NAVs)`);
     } finally {
       await navSession.close();
     }
@@ -493,8 +546,8 @@ async function migrateTenant(tenantId: string) {
       const entitySubscriptionCount = entitySubscriptionResult.records[0].get('created').toNumber();
       console.log(`✅ Created ${entitySubscriptionCount} Entity->Subscription relationships`);
 
-      // Subscription -> NAV relationships (All NAVs for historical analysis)
-      console.log('💰 Creating Subscription -> NAV relationships (All NAVs)...');
+      // Subscription -> NAV relationships (Consolidated NAVs)
+      console.log('💰 Creating Subscription -> NAV relationships (Consolidated NAVs)...');
       const subscriptionNavQuery = `
         MATCH (s:Subscription), (n:NAV)
         WHERE s.tenant_id = $tenant_id AND n.tenant_id = $tenant_id 
