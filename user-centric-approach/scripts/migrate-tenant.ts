@@ -495,7 +495,128 @@ async function migrateTenant(tenantId: string) {
       await navSession.close();
     }
 
-    // 7. Create relationships for this tenant
+    // 7. Migrate Movements for this tenant (Combined Structure)
+    console.log(`\n💰 Migrating Movements for tenant: ${tenantId}`);
+    
+    // Get movements data
+    const movementsQuery = `SELECT * FROM movements WHERE tenant_id = $1 ORDER BY fund_name, investment_entity, as_of_date`;
+    const movements = await postgres.query(movementsQuery, [tenantId]);
+    console.log(`📊 Found ${movements.length} movements for this tenant`);
+    
+    // Get transactions data  
+    const transactionsQuery = `SELECT * FROM transactions WHERE tenant_id = $1 ORDER BY fund_name, investment_entity, as_of_date`;
+    const transactions = await postgres.query(transactionsQuery, [tenantId]);
+    console.log(`📊 Found ${transactions.length} transactions for this tenant`);
+    
+    // Group by fund_name + investment_entity combination
+    const movementGroups = new Map<string, any[]>();
+    
+    // Process movements
+    for (const movement of movements) {
+      const key = `${movement.fund_name}|${movement.investment_entity}`;
+      if (!movementGroups.has(key)) {
+        movementGroups.set(key, []);
+      }
+      movementGroups.get(key)!.push({
+        ...movement,
+        source: 'movements',
+        type: movement.movement_type,
+        amount: movement.amount
+      });
+    }
+    
+    // Process transactions
+    for (const transaction of transactions) {
+      const key = `${transaction.fund_name}|${transaction.investment_entity}`;
+      if (!movementGroups.has(key)) {
+        movementGroups.set(key, []);
+      }
+      movementGroups.get(key)!.push({
+        ...transaction,
+        source: 'transactions',
+        type: transaction.transaction_type,
+        amount: transaction.transaction_amount
+      });
+    }
+    
+    console.log(`📊 Grouped into ${movementGroups.size} unique fund/entity combinations`);
+    
+    const movementsSession = neo4j['driver']!.session({ database: 'neo4j' });
+    try {
+      for (const [key, group] of movementGroups) {
+        const [fundName, investmentEntity] = key.split('|');
+        
+        // Build combined movements JSON
+        const movementsData: Record<string, any> = {};
+        let latestMovementDate = '';
+        let latestMovementType = '';
+        let latestMovementAmount = '';
+        let earliestCreatedAt = '';
+        let latestUpdatedAt = '';
+        
+        for (const movement of group) {
+          const dateStr = new Date(movement.as_of_date).toISOString().split('T')[0];
+          movementsData[dateStr] = {
+            type: movement.type,
+            amount: movement.amount.toString(),
+            source: movement.source
+          };
+          
+          // Track latest values
+          if (!latestMovementDate || dateStr > latestMovementDate) {
+            latestMovementDate = dateStr;
+            latestMovementType = movement.type;
+            latestMovementAmount = movement.amount.toString();
+          }
+          
+          // Track timestamps
+          const createdAt = new Date(movement.created_at).toISOString();
+          const updatedAt = new Date(movement.updated_at).toISOString();
+          
+          if (!earliestCreatedAt || createdAt < earliestCreatedAt) {
+            earliestCreatedAt = createdAt;
+          }
+          
+          if (!latestUpdatedAt || updatedAt > latestUpdatedAt) {
+            latestUpdatedAt = updatedAt;
+          }
+        }
+        
+        // Create consolidated Movements node
+        const consolidatedId = `movements_${fundName.replace(/[^a-zA-Z0-9]/g, '_')}_${investmentEntity.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        
+        await movementsSession.run(`
+          MERGE (m:Movements {id: $id})
+          SET m.tenant_id = $tenant_id,
+              m.fund_name = $fund_name,
+              m.investment_entity = $investment_entity,
+              m.movements = $movements,
+              m.latest_movement_date = $latest_movement_date,
+              m.latest_movement_type = $latest_movement_type,
+              m.latest_movement_amount = $latest_movement_amount,
+              m.movement_count = $movement_count,
+              m.created_at = $created_at,
+              m.updated_at = $updated_at
+        `, handleNullValues({
+          id: consolidatedId,
+          tenant_id: tenantId,
+          fund_name: fundName,
+          investment_entity: investmentEntity,
+          movements: JSON.stringify(movementsData),
+          latest_movement_date: latestMovementDate,
+          latest_movement_type: latestMovementType,
+          latest_movement_amount: latestMovementAmount,
+          movement_count: group.length,
+          created_at: new Date(earliestCreatedAt),
+          updated_at: new Date(latestUpdatedAt)
+        }));
+      }
+      console.log(`✅ Migrated ${movementGroups.size} consolidated Movements nodes (from ${movements.length + transactions.length} individual records)`);
+    } finally {
+      await movementsSession.close();
+    }
+
+    // 8. Create relationships for this tenant
     console.log(`\n🔗 Creating relationships for tenant: ${tenantId}`);
     const relationshipSession = neo4j['driver']!.session({ database: 'neo4j' });
     try {
@@ -561,6 +682,22 @@ async function migrateTenant(tenantId: string) {
       const subscriptionNavResult = await relationshipSession.run(subscriptionNavQuery, { tenant_id: tenantId });
       const subscriptionNavCount = subscriptionNavResult.records[0].get('created').toNumber();
       console.log(`✅ Created ${subscriptionNavCount} Subscription->NAV relationships`);
+
+      // Subscription -> Movements relationships (Consolidated Movements)
+      console.log('💰 Creating Subscription -> Movements relationships (Consolidated Movements)...');
+      const subscriptionMovementsQuery = `
+        MATCH (s:Subscription), (m:Movements)
+        WHERE s.tenant_id = $tenant_id AND m.tenant_id = $tenant_id 
+        AND s.fund_name = m.fund_name 
+        AND s.investment_entity = m.investment_entity
+        WITH DISTINCT s, m
+        MERGE (s)-[:HAS_MOVEMENTS {created_at: datetime()}]->(m)
+        RETURN count(*) as created
+      `;
+      
+      const subscriptionMovementsResult = await relationshipSession.run(subscriptionMovementsQuery, { tenant_id: tenantId });
+      const subscriptionMovementsCount = subscriptionMovementsResult.records[0].get('created').toNumber();
+      console.log(`✅ Created ${subscriptionMovementsCount} Subscription->Movements relationships`);
 
       // Tenant -> Fund INTEREST relationships for funds without subscriptions
       console.log('💡 Creating Tenant -> Fund INTEREST relationships...');

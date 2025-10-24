@@ -314,6 +314,83 @@ export const USER_CENTRIC_SCHEMA = {
           cypher: 'CREATE INDEX nav_fund_entity IF NOT EXISTS FOR (n:NAV) ON (n.fund_name, n.investment_entity)'
         }
       ]
+    },
+
+    Movements: {
+      label: 'Movements',
+      properties: [
+        'id',
+        'tenant_id', 
+        'fund_name',
+        'investment_entity',
+        'movements',        // JSON string with combined movement/transaction data
+        'latest_movement_date',
+        'latest_movement_type', 
+        'latest_movement_amount',
+        'movement_count',
+        'created_at',
+        'updated_at'
+      ],
+      constraints: [
+        {
+          name: 'movements_id_unique',
+          type: 'UNIQUE',
+          label: 'Movements',
+          properties: ['id'],
+          cypher: 'CREATE CONSTRAINT movements_id_unique IF NOT EXISTS FOR (m:Movements) REQUIRE m.id IS UNIQUE'
+        },
+        {
+          name: 'movements_fund_entity_unique',
+          type: 'UNIQUE', 
+          label: 'Movements',
+          properties: ['fund_name', 'investment_entity', 'tenant_id'],
+          cypher: 'CREATE CONSTRAINT movements_fund_entity_unique IF NOT EXISTS FOR (m:Movements) REQUIRE (m.fund_name, m.investment_entity, m.tenant_id) IS UNIQUE'
+        }
+      ],
+      indexes: [
+        {
+          name: 'movements_tenant_id',
+          label: 'Movements',
+          properties: ['tenant_id'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX movements_tenant_id IF NOT EXISTS FOR (m:Movements) ON (m.tenant_id)'
+        },
+        {
+          name: 'movements_fund_name',
+          label: 'Movements', 
+          properties: ['fund_name'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX movements_fund_name IF NOT EXISTS FOR (m:Movements) ON (m.fund_name)'
+        },
+        {
+          name: 'movements_investment_entity',
+          label: 'Movements',
+          properties: ['investment_entity'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX movements_investment_entity IF NOT EXISTS FOR (m:Movements) ON (m.investment_entity)'
+        },
+        {
+          name: 'movements_latest_date',
+          label: 'Movements',
+          properties: ['latest_movement_date'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX movements_latest_date IF NOT EXISTS FOR (m:Movements) ON (m.latest_movement_date)'
+        },
+        {
+          name: 'movements_latest_type',
+          label: 'Movements',
+          properties: ['latest_movement_type'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX movements_latest_type IF NOT EXISTS FOR (m:Movements) ON (m.latest_movement_type)'
+        },
+        {
+          name: 'movements_fund_entity',
+          label: 'Movements',
+          properties: ['fund_name', 'investment_entity'],
+          type: 'BTREE',
+          cypher: 'CREATE INDEX movements_fund_entity IF NOT EXISTS FOR (m:Movements) ON (m.fund_name, m.investment_entity)'
+        }
+      ]
     }
   },
 

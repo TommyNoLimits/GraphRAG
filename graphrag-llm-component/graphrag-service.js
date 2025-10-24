@@ -43,6 +43,7 @@ Database Schema:
 - UserFund: {id, tenant_id, fund_name, investment_manager_name, general_partner, investment_type, fund_type, stage, investment_minimum, management_fee, carry_fee, geography, gics_sector, liquidity, investment_summary, ...}
 - Subscription: {id, tenant_id, fund_name, investment_entity, as_of_date, commitment_amount (stored as string), ...}
 - NAV: {id, tenant_id, fund_name, investment_entity, nav_values (object with date->value pairs), latest_nav, latest_date, nav_count, created_at, updated_at}
+- Movements: {id, tenant_id, fund_name, investment_entity, movements (JSON string with combined movement/transaction data), latest_movement_date, latest_movement_type, latest_movement_amount, movement_count, created_at, updated_at}
 
 IMPORTANT DATA TYPE NOTES:
 - Many numeric fields are stored as STRINGS (e.g., "11500.00", "0.00")
@@ -59,12 +60,23 @@ NAV QUERY PATTERNS:
 - nav_values is stored as a JSON string, not an object
 - Example: Parse n.nav_values in application code to access specific dates
 
+MOVEMENTS QUERY PATTERNS:
+- Use m.latest_movement_date for most recent movement date
+- Use m.latest_movement_type for most recent movement type
+- Use m.latest_movement_amount for most recent movement amount
+- Use m.movements (JSON string) to get all historical movement/transaction data
+- Use m.movement_count to know how many historical entries exist
+- movements is stored as a JSON string with structure: {"2023-01-15": {"type": "capital_call", "amount": "50000.00", "source": "movements"}}
+- Each movement entry has: type (movement_type or transaction_type), amount, source ("movements" or "transactions")
+- Example: Parse m.movements in application code to access specific dates and movement types
+
 Relationships:
 - User -[:BELONGS_TO]-> Tenant
 - Tenant -[:MANAGES]-> UserEntity
 - UserEntity -[:INVESTED_IN]-> UserFund
 - UserFund -[:HAS_SUBSCRIPTION]-> Subscription
 - Subscription -[:HAS_NAV]-> NAV (Net Asset Value data)
+- Subscription -[:HAS_MOVEMENTS]-> Movements (Movement/Transaction data)
 - UserEntity -[:HAS_SUBSCRIPTION]-> Subscription
 - Tenant -[:INTEREST]-> UserFund
 
@@ -72,12 +84,13 @@ ${tenantId ? `IMPORTANT: Filter all queries by tenant_id = '${tenantId}' for dat
 
 CYPHER RULES FOR NUMERIC OPERATIONS:
 - Always use toFloat() when performing SUM(), AVG(), MIN(), MAX() on fields that might be stored as strings
-- Common string-numeric fields: commitment_amount, latest_nav, investment_minimum, management_fee, carry_fee, amount, value, price, cost, total, sum, balance
+- Common string-numeric fields: commitment_amount, latest_nav, latest_movement_amount, investment_minimum, management_fee, carry_fee, amount, value, price, cost, total, sum, balance
 - Use toInteger() for whole number conversions
 - Handle potential null values with COALESCE() if needed
 - Examples: 
   * SUM(toFloat(s.commitment_amount)) AS total_amount
   * AVG(toFloat(nav.latest_nav)) AS average_nav
+  * MAX(toFloat(m.latest_movement_amount)) AS max_movement_amount
   * MAX(toFloat(uf.investment_minimum)) AS max_minimum
 
 NAV-SPECIFIC QUERY EXAMPLES:
@@ -85,6 +98,12 @@ NAV-SPECIFIC QUERY EXAMPLES:
 - All NAVs for fund: RETURN nav.nav_values, nav.nav_count
 - NAV aggregation: SUM(toFloat(nav.latest_nav)) AS total_nav
 - NAV statistics: AVG(toFloat(nav.latest_nav)) AS avg_nav
+
+MOVEMENTS-SPECIFIC QUERY EXAMPLES:
+- Latest movement: RETURN m.latest_movement_date, m.latest_movement_type, m.latest_movement_amount
+- All movements for fund: RETURN m.movements, m.movement_count
+- Movement aggregation: SUM(toFloat(m.latest_movement_amount)) AS total_movement_amount
+- Movement statistics: AVG(toFloat(m.latest_movement_amount)) AS avg_movement_amount
 
 Natural Language Query: "${naturalLanguageQuery}"
 
@@ -169,6 +188,7 @@ Return ONLY the Cypher query, no explanations or markdown formatting.
     const stringNumericFields = [
       'commitment_amount',
       'latest_nav',  // Updated from 'nav' to 'latest_nav'
+      'latest_movement_amount',  // Added for Movements
       'investment_minimum',
       'management_fee',
       'carry_fee',

@@ -182,6 +182,29 @@ export interface NAV {
   updated_at?: Date;
 }
 
+export interface Movements {
+  id: string;  // Composite key: "movements_{fund_name}_{investment_entity}"
+  tenant_id: string;
+  fund_name: string;
+  investment_entity: string;
+  
+  // Combined movement/transaction data
+  movements: Record<string, {
+    type: string;           // movement_type or transaction_type
+    amount: string;         // amount or transaction_amount
+    source: string;         // "movements" or "transactions"
+  }>;
+  
+  // Quick access fields
+  latest_movement_date: string;
+  latest_movement_type: string;
+  latest_movement_amount: string;
+  movement_count: number;
+  
+  created_at?: Date;
+  updated_at?: Date;
+}
+
 export interface Transaction {
   id: number;
   tenant_id: string;
