@@ -150,6 +150,50 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+/**
+ * Get timing performance statistics
+ */
+app.get('/api/timing', (req, res) => {
+  try {
+    // This would typically come from a performance monitoring system
+    // For now, we'll return a sample response showing what timing data looks like
+    const sampleTimingData = {
+      message: "Timing data is now included in all query responses",
+      example: {
+        timings: {
+          total: 1250,
+          cypherGeneration: 800,
+          queryExecution: 300,
+          explanationGeneration: 150
+        },
+        timingSummary: {
+          total: "1250ms",
+          breakdown: {
+            cypherGeneration: "800ms",
+            queryExecution: "300ms",
+            explanationGeneration: "150ms"
+          },
+          percentages: {
+            cypherGeneration: "64%",
+            queryExecution: "24%",
+            explanationGeneration: "12%"
+          }
+        }
+      },
+      endpoints: {
+        query: "POST /api/query - Returns timing data in response",
+        journey: "GET /api/user/:email/journey - Returns timing data in response",
+        search: "POST /api/funds/search - Returns timing data in response"
+      }
+    };
+    
+    res.json(sampleTimingData);
+  } catch (error) {
+    console.error('❌ Timing stats error:', error);
+    res.status(500).json({ error: 'Failed to get timing statistics' });
+  }
+});
+
 // Error handling middleware
 app.use((error, req, res, next) => {
   console.error('❌ Unhandled error:', error);
@@ -177,5 +221,6 @@ app.listen(PORT, () => {
   console.log(`   POST /api/funds/search - Search funds`);
   console.log(`   GET  /api/health - Health check`);
   console.log(`   GET  /api/stats - Database statistics`);
+  console.log(`   GET  /api/timing - Performance timing information`);
   console.log(`🌐 Frontend: http://localhost:${PORT}`);
 });

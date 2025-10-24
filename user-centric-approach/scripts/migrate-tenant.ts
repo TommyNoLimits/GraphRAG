@@ -432,7 +432,7 @@ async function migrateTenant(tenantId: string) {
         const [fundName, investmentEntity] = key.split('|');
         
         // Build nav_values object
-        const navValues: Record<string, string> = {};
+        const navValues: Record<string, {nav: string, created_at: string, updated_at: string}> = {};
         let latestNav = '';
         let latestDate = '';
         let earliestCreatedAt = '';
@@ -442,7 +442,11 @@ async function migrateTenant(tenantId: string) {
           const dateStr = new Date(nav.as_of_date).toISOString().split('T')[0]; // YYYY-MM-DD format
           const navValue = nav.nav.toString();
           
-          navValues[dateStr] = navValue;
+          navValues[dateStr] = {
+            nav: navValue,
+            created_at: new Date(nav.created_at).toISOString(),
+            updated_at: new Date(nav.updated_at).toISOString()
+          };
           
           // Track latest values
           if (!latestDate || dateStr > latestDate) {
@@ -521,7 +525,7 @@ async function migrateTenant(tenantId: string) {
         ...movement,
         source: 'movements',
         type: movement.movement_type,
-        amount: movement.amount
+        amount: movement.transaction_amount || movement.amount || 0
       });
     }
     
@@ -547,7 +551,7 @@ async function migrateTenant(tenantId: string) {
         const [fundName, investmentEntity] = key.split('|');
         
         // Build combined movements JSON
-        const movementsData: Record<string, any> = {};
+        const movementsData: Record<string, {type: string, amount: string, source: string, created_at: string, updated_at: string}> = {};
         let latestMovementDate = '';
         let latestMovementType = '';
         let latestMovementAmount = '';
@@ -559,7 +563,9 @@ async function migrateTenant(tenantId: string) {
           movementsData[dateStr] = {
             type: movement.type,
             amount: movement.amount.toString(),
-            source: movement.source
+            source: movement.source,
+            created_at: new Date(movement.created_at).toISOString(),
+            updated_at: new Date(movement.updated_at).toISOString()
           };
           
           // Track latest values

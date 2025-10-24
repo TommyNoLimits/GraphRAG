@@ -174,7 +174,11 @@ export interface NAV {
   tenant_id: string;
   fund_name: string;
   investment_entity: string;
-  nav_values: Record<string, string>;  // Date -> NAV value pairs: {"2023-01-01": "100.00"}
+  nav_values: Record<string, {  // Date -> NAV data pairs
+    nav: string;
+    created_at: string;
+    updated_at: string;
+  }>;
   latest_nav: string;  // Most recent NAV value
   latest_date: string;  // Most recent NAV date
   nav_count: number;  // Number of historical NAV entries
@@ -193,6 +197,8 @@ export interface Movements {
     type: string;           // movement_type or transaction_type
     amount: string;         // amount or transaction_amount
     source: string;         // "movements" or "transactions"
+    created_at: string;     // Individual entry timestamp
+    updated_at: string;     // Individual entry timestamp
   }>;
   
   // Quick access fields

@@ -53,27 +53,37 @@ class MovementsTest {
         "2023-01-15": {
           "type": "capital_call",
           "amount": "50000.00",
-          "source": "movements"
+          "source": "movements",
+          "created_at": "2023-01-15T14:20:00Z",
+          "updated_at": "2023-01-15T14:20:00Z"
         },
         "2023-02-20": {
           "type": "distribution",
           "amount": "25000.00",
-          "source": "movements"
+          "source": "movements",
+          "created_at": "2023-02-20T09:30:00Z",
+          "updated_at": "2023-02-20T09:30:00Z"
         },
         "2023-03-10": {
           "type": "capital_contribution",
           "amount": "75000.00",
-          "source": "transactions"
+          "source": "transactions",
+          "created_at": "2023-03-10T11:45:00Z",
+          "updated_at": "2023-03-10T11:45:00Z"
         },
         "2023-04-15": {
           "type": "distribution_payment",
           "amount": "30000.00",
-          "source": "transactions"
+          "source": "transactions",
+          "created_at": "2023-04-15T16:15:00Z",
+          "updated_at": "2023-04-15T16:15:00Z"
         },
         "2023-05-20": {
           "type": "management_fee",
           "amount": "5000.00",
-          "source": "movements"
+          "source": "movements",
+          "created_at": "2023-05-20T13:00:00Z",
+          "updated_at": "2023-05-20T13:00:00Z"
         }
       };
 
@@ -81,17 +91,23 @@ class MovementsTest {
         "2023-02-01": {
           "type": "capital_call",
           "amount": "100000.00",
-          "source": "movements"
+          "source": "movements",
+          "created_at": "2023-02-01T10:00:00Z",
+          "updated_at": "2023-02-01T10:00:00Z"
         },
         "2023-03-15": {
           "type": "distribution",
           "amount": "40000.00",
-          "source": "movements"
+          "source": "movements",
+          "created_at": "2023-03-15T15:30:00Z",
+          "updated_at": "2023-03-15T15:30:00Z"
         },
         "2023-04-30": {
           "type": "capital_contribution",
           "amount": "120000.00",
-          "source": "transactions"
+          "source": "transactions",
+          "created_at": "2023-04-30T12:45:00Z",
+          "updated_at": "2023-04-30T12:45:00Z"
         }
       };
 
